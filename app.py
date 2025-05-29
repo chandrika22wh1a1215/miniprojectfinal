@@ -5,6 +5,7 @@ from pdfminer.high_level import extract_text
 import os
 from flask_cors import CORS
 from werkzeug.utils import secure_filename  # NEW IMPORT
+import fitz
 
 app = Flask(__name__)
 CORS(app)
@@ -37,6 +38,14 @@ def get_resumes():
         resume["_id"] = str(resume["_id"])
     return jsonify(data)
 
+
+def extract_text_pymupdf(pdf_path):
+    doc = fitz.open(pdf_path)
+    text = ""
+    for page in doc:
+        text += page.get_text()
+    return text
+
 @app.route("/upload_resume", methods=["POST"])
 def upload_resume():
     if 'file' not in request.files:
@@ -50,13 +59,12 @@ def upload_resume():
         return jsonify({"msg": "Invalid file type (only PDF allowed)"}), 400
 
     try:
-        # Sanitize filename
         safe_filename = secure_filename(file.filename)
         filepath = os.path.join("uploads", safe_filename)
         file.save(filepath)
 
-        # Extract text and save to MongoDB
-        text = extract_text(filepath)
+        # Use PyMuPDF for text extraction
+        text = extract_text_pymupdf(filepath)
         resume_data = {
             "filename": safe_filename,
             "text": text
@@ -64,12 +72,13 @@ def upload_resume():
         result = resumes.insert_one(resume_data)
         resume_id = str(result.inserted_id)
         return jsonify({"msg": "File uploaded!", "id": resume_id}), 201
-    
+
     except Exception as e:
+        import traceback
+        print(traceback.format_exc())
         return jsonify({"msg": f"Server error: {str(e)}"}), 500
-    
+
     finally:
-        # Cleanup: Delete the file after processing
         if os.path.exists(filepath):
             os.remove(filepath)
 
