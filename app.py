@@ -8,7 +8,7 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)
 
-# CHANGE: Use environment variable for MongoDB URI
+# MongoDB setup
 mongo_uri = os.getenv("MONGO_URI")
 if not mongo_uri:
     raise Exception("MONGO_URI environment variable not set")
@@ -17,6 +17,7 @@ client = MongoClient(mongo_uri)
 db = client["job_scraping_db"]
 resumes = db["resumes"]
 
+# Ensure upload folder exists
 if not os.path.exists('uploads'):
     os.makedirs('uploads')
 
@@ -32,9 +33,11 @@ def get_resumes():
 @app.route("/upload_resume", methods=["POST"])
 def upload_resume():
     if 'file' not in request.files:
+        print("No file key in request.files")  # Debugging aid
         return jsonify({"msg": "No file part"}), 400
 
     file = request.files['file']
+    print(f"Received file: {file.filename}")  # Debugging aid
 
     if file.filename == '':
         return jsonify({"msg": "No selected file"}), 400
