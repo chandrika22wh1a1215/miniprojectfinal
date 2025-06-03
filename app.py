@@ -8,18 +8,27 @@ import fitz  # PyMuPDF
 import tempfile
 import traceback
 
+from flask_bcrypt import Bcrypt
+from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
+
 app = Flask(__name__)
 CORS(app)
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024  # 2 MB upload limit
+app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY", "your-secret-key")  # Set this in production!
 
-# MongoDB setup
-mongo_uri = os.getenv("MONGO_URI")
-if not mongo_uri:
-    raise Exception("MONGO_URI environment variable not set")
+bcrypt = Bcrypt(app)
+jwt = JWTManager(app)
+
+# MongoDB setup with your cluster connection string (replace with your actual URI)
+mongo_uri = "mongodb+srv://22wh1a1215:Resume@cluster0.fu4wtmw.mongodb.net/job_scraping_db?retryWrites=true&w=majority"
 
 client = MongoClient(mongo_uri)
 db = client["job_scraping_db"]
 resumes = db["resumes"]
+users = db["users"]
+
+# Allowed emails for /resumes GET endpoint
+ALLOWED_USERS = {"22wh1a1215@bvrithyderabad.edu.in", "22wh1a1239@bvrithyderabad.edu.in"}  # Replace with real emails
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() == 'pdf'
@@ -28,21 +37,55 @@ def allowed_file(filename):
 def home():
     return "Flask app is running!"
 
+@app.route("/register", methods=["POST"])
+def register():
+    data = request.json
+    email = data.get("email")
+    password = data.get("password")
+    
+    if users.find_one({"email": email}):
+        return jsonify({"msg": "User already exists"}), 409
+    
+    hashed_pw = bcrypt.generate_password_hash(password).decode('utf-8')
+    users.insert_one({"email": email, "password": hashed_pw})
+    return jsonify({"msg": "User registered successfully"}), 201
+
+
+@app.route("/login", methods=["POST"])
+def login():
+    data = request.json
+    email = data.get("email")
+    password = data.get("password")
+    
+    user = users.find_one({"email": email})
+    if not user or not bcrypt.check_password_hash(user["password"], password):
+        return jsonify({"msg": "Invalid credentials"}), 401
+    
+    access_token = create_access_token(identity=email)
+    return jsonify({"access_token": access_token}), 200
+
 @app.route("/resumes", methods=["GET"])
+@jwt_required()
 def get_resumes():
+    current_user_email = get_jwt_identity()
+    if current_user_email not in ALLOWED_USERS:
+        return jsonify({"msg": "Access forbidden"}), 403
+
     data = list(resumes.find({}))
     for resume in data:
         resume["_id"] = str(resume["_id"])
     return jsonify(data)
 
+
 @app.route("/dbtest")
 def db_test():
-    try:
-        db.command("ping")
-        return jsonify({"msg": "MongoDB connection successful!"})
-    except Exception as e:
-        print(traceback.format_exc())
-        return jsonify({"msg": f"MongoDB connection failed: {str(e)}"}), 500
+    return jsonify({"msg": "MongoDB connection successful!"})
+
+@app.route("/test")
+def test():
+    return "Test route working!"
+
+
 
 def extract_text_pymupdf(pdf_path):
     doc = fitz.open(pdf_path)
@@ -52,6 +95,7 @@ def extract_text_pymupdf(pdf_path):
     return text
 
 @app.route("/upload_resume", methods=["POST"])
+@jwt_required()
 def upload_resume():
     if 'file' not in request.files:
         return jsonify({"msg": "No file part in the request"}), 400
@@ -64,12 +108,10 @@ def upload_resume():
         return jsonify({"msg": "Invalid file type (only PDF allowed)"}), 400
 
     try:
-        # Save to a temporary file (avoids permission issues)
         with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
             file.save(tmp.name)
             filepath = tmp.name
 
-        # Extract text using PyMuPDF
         text = extract_text_pymupdf(filepath)
         resume_data = {
             "filename": secure_filename(file.filename),
@@ -84,7 +126,6 @@ def upload_resume():
         return jsonify({"msg": f"Server error: {str(e)}"}), 500
 
     finally:
-        # Remove the temporary file
         try:
             if 'filepath' in locals() and os.path.exists(filepath):
                 os.remove(filepath)
@@ -92,6 +133,7 @@ def upload_resume():
             pass
 
 @app.route("/resumes/<id>", methods=["PUT"])
+@jwt_required()
 def update_resume(id):
     updated_data = request.json
     resumes.update_one({"_id": ObjectId(id)}, {"$set": updated_data})
