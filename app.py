@@ -12,12 +12,14 @@ from flask_bcrypt import Bcrypt
 from flask_jwt_extended import (
     JWTManager, create_access_token, jwt_required, get_jwt_identity
 )
-from datetime import timedelta
 
 app = Flask(__name__)
 CORS(app)
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024  # 2 MB upload limit
-app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY", "your-secret-key")  # Set this in production!
+
+# JWT configuration
+app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY", "your-secret-key")
+app.config["JWT_ACCESS_TOKEN_EXPIRES"] = False  # Tokens will not expire
 
 bcrypt = Bcrypt(app)
 jwt = JWTManager(app)
@@ -34,7 +36,7 @@ users = db["users"]
 ALLOWED_USERS = {
     "22wh1a1215@bvrithyderabad.edu.in", 
     "22wh1a1239@bvrithyderabad.edu.in"
-}  # Replace with real emails
+}
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() == 'pdf'
@@ -66,8 +68,7 @@ def login():
     if not user or not bcrypt.check_password_hash(user["password"], password):
         return jsonify({"msg": "Invalid credentials"}), 401
     
-    # Create token with 7 days expiry
-    access_token = create_access_token(identity=email, expires_delta=timedelta(days=7))
+    access_token = create_access_token(identity=email)  # No expiry
     return jsonify({"access_token": access_token}), 200
 
 @app.route("/resumes", methods=["GET"])
