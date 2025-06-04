@@ -26,7 +26,6 @@ jwt = JWTManager(app)
 
 # MongoDB setup
 mongo_uri = "mongodb+srv://22wh1a1215:Resume@cluster0.fu4wtmw.mongodb.net/job_scraping_db?retryWrites=true&w=majority"
-
 client = MongoClient(mongo_uri)
 db = client["job_scraping_db"]
 resumes = db["resumes"]
@@ -34,7 +33,7 @@ users = db["users"]
 
 # Allowed emails for /resumes GET endpoint
 ALLOWED_USERS = {
-    "22wh1a1215@bvrithyderabad.edu.in", 
+    "22wh1a1215@bvrithyderabad.edu.in",
     "22wh1a1239@bvrithyderabad.edu.in",
     "allisarmishta@gmail.com"
 }
@@ -51,10 +50,10 @@ def register():
     data = request.json
     email = data.get("email")
     password = data.get("password")
-    
+
     if users.find_one({"email": email}):
         return jsonify({"msg": "User already exists"}), 409
-    
+
     hashed_pw = bcrypt.generate_password_hash(password).decode('utf-8')
     users.insert_one({"email": email, "password": hashed_pw})
     return jsonify({"msg": "User registered successfully"}), 201
@@ -64,11 +63,11 @@ def login():
     data = request.json
     email = data.get("email")
     password = data.get("password")
-    
+
     user = users.find_one({"email": email})
     if not user or not bcrypt.check_password_hash(user["password"], password):
         return jsonify({"msg": "Invalid credentials"}), 401
-    
+
     access_token = create_access_token(identity=email)  # No expiry
     return jsonify({"access_token": access_token}), 200
 
@@ -119,7 +118,7 @@ def upload_resume():
         text = extract_text_pymupdf(filepath)
         resume_data = {
             "filename": secure_filename(file.filename),
-            "text": text
+            "resumeText": text  # ✅ Changed from "text" to "resumeText"
         }
         result = resumes.insert_one(resume_data)
         resume_id = str(result.inserted_id)
