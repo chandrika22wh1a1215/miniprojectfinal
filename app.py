@@ -9,7 +9,10 @@ import tempfile
 import traceback
 
 from flask_bcrypt import Bcrypt
-from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
+from flask_jwt_extended import (
+    JWTManager, create_access_token, jwt_required, get_jwt_identity
+)
+from datetime import timedelta
 
 app = Flask(__name__)
 CORS(app)
@@ -19,7 +22,7 @@ app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY", "your-secret-key")  #
 bcrypt = Bcrypt(app)
 jwt = JWTManager(app)
 
-# MongoDB setup with your cluster connection string (replace with your actual URI)
+# MongoDB setup
 mongo_uri = "mongodb+srv://22wh1a1215:Resume@cluster0.fu4wtmw.mongodb.net/job_scraping_db?retryWrites=true&w=majority"
 
 client = MongoClient(mongo_uri)
@@ -28,7 +31,10 @@ resumes = db["resumes"]
 users = db["users"]
 
 # Allowed emails for /resumes GET endpoint
-ALLOWED_USERS = {"22wh1a1215@bvrithyderabad.edu.in", "22wh1a1239@bvrithyderabad.edu.in"}  # Replace with real emails
+ALLOWED_USERS = {
+    "22wh1a1215@bvrithyderabad.edu.in", 
+    "22wh1a1239@bvrithyderabad.edu.in"
+}  # Replace with real emails
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() == 'pdf'
@@ -50,7 +56,6 @@ def register():
     users.insert_one({"email": email, "password": hashed_pw})
     return jsonify({"msg": "User registered successfully"}), 201
 
-
 @app.route("/login", methods=["POST"])
 def login():
     data = request.json
@@ -61,7 +66,8 @@ def login():
     if not user or not bcrypt.check_password_hash(user["password"], password):
         return jsonify({"msg": "Invalid credentials"}), 401
     
-    access_token = create_access_token(identity=email)
+    # Create token with 7 days expiry
+    access_token = create_access_token(identity=email, expires_delta=timedelta(days=7))
     return jsonify({"access_token": access_token}), 200
 
 @app.route("/resumes", methods=["GET"])
@@ -76,7 +82,6 @@ def get_resumes():
         resume["_id"] = str(resume["_id"])
     return jsonify(data)
 
-
 @app.route("/dbtest")
 def db_test():
     return jsonify({"msg": "MongoDB connection successful!"})
@@ -84,8 +89,6 @@ def db_test():
 @app.route("/test")
 def test():
     return "Test route working!"
-
-
 
 def extract_text_pymupdf(pdf_path):
     doc = fitz.open(pdf_path)
