@@ -147,7 +147,6 @@ def add_manual_resume():
     projects = data.get("projects", "")
     links = data.get("links", "")
     summary = data.get("summary", "")
-    resume_text = data.get("resumeText", "")  # new optional field
 
     # Validate constraints
     if not isinstance(name, str) or any(char.isdigit() for char in name):
@@ -161,10 +160,24 @@ def add_manual_resume():
     for field_name, field_value in [
         ("skills", skills), ("education", education), ("experience", experience),
         ("certifications", certifications), ("projects", projects),
-        ("links", links), ("summary", summary), ("resumeText", resume_text)
+        ("links", links), ("summary", summary)
     ]:
         if not isinstance(field_value, str):
             return jsonify({"msg": f"Invalid {field_name}: must be a string."}), 400
+
+    # Auto-generate resumeText from all fields
+    resume_text = f"""
+Name: {name}
+Email: {email}
+Phone: {phone}
+Skills: {skills}
+Education: {education}
+Experience: {experience}
+Certifications: {certifications}
+Projects: {projects}
+Links: {links}
+Summary: {summary}
+""".strip()
 
     resume = {
         "name": name,
@@ -177,17 +190,12 @@ def add_manual_resume():
         "projects": projects,
         "links": links,
         "summary": summary,
+        "resumeText": resume_text,
+        "submitted_by": get_jwt_identity()
     }
-
-    # Add resumeText only if provided and not empty
-    if resume_text:
-        resume["resumeText"] = resume_text
-
-    resume["submitted_by"] = get_jwt_identity()
 
     result = resumes.insert_one(resume)
     return jsonify({"msg": "Manual resume added!", "id": str(result.inserted_id)}), 201
-
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0")
