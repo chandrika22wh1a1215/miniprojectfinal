@@ -141,10 +141,10 @@ def add_manual_resume():
 
         data = request.json
 
-        personal_info = data.get("PersonalInfo", {})
-        name = personal_info.get("FullName", "").strip()
-        email = personal_info.get("Email", "").strip()
-        phone = personal_info.get("PhoneNumber", "").strip()
+        # Top-level personal fields
+        name = data.get("Full Name", "").strip()
+        email = data.get("email", "").strip()
+        phone = data.get("Phone Number", "").strip()
 
         print(f"✅ Name: {name}, Email: {email}, Phone: {phone}")
 
@@ -156,21 +156,15 @@ def add_manual_resume():
         if not phone or not phone.isdigit():
             return jsonify({"msg": "Phone must be digits only"}), 400
 
-        # Clean and store only non-empty optional fields
-        def clean_list(items):
-            return [i for i in items if i and any(v for v in i.values())] if isinstance(items, list) else []
-
-        def clean_string(value):
-            return value.strip() if isinstance(value, str) and value.strip() else ""
-
-        skills = [s for s in data.get("Skills", []) if s.strip()]
-        education = clean_list(data.get("Education", []))
-        experience = clean_list(data.get("Experience", []))
-        certifications = clean_list(data.get("Certifications", []))
-        projects = clean_list(data.get("Projects", []))
-        links = [l for l in data.get("Links", []) if l.strip()]
-        summary = clean_string(data.get("Summary", ""))
-        total_years = clean_string(data.get("TotalYearsOverall", ""))
+        # Optional fields (safe defaults)
+        skills = data.get("Skills", [])
+        education = data.get("Education", [])
+        experience = data.get("Experience", [])
+        certifications = data.get("Certifications", [])
+        projects = data.get("Projects", [])
+        links = data.get("Links", [])
+        summary = data.get("Summary", "")
+        total_years = data.get("TotalYearsOverall", "")
 
         resume_text = f"""
 Name: {name}
@@ -180,22 +174,22 @@ Skills: {', '.join(skills)}
 
 Education:
 """ + "\n".join([
-    f"- {e.get('Degree')} at {e.get('Institution')} ({e.get('Year')})"
+    f"- {e.get('Degree', '')} at {e.get('Institution', '')} ({e.get('Year', '')})"
     for e in education]) + """
 
 Projects:
 """ + "\n".join([
-    f"- {p.get('Name')}: {p.get('Description')} using {p.get('Technologies')}"
+    f"- {p.get('Name', '')}: {p.get('Description', '')} using {p.get('Technologies', '')}"
     for p in projects]) + """
 
 Experience:
 """ + "\n".join([
-    f"- {x.get('Title')} at {x.get('Company')} ({x.get('Duration')})"
+    f"- {x.get('Title', '')} at {x.get('Company', '')} ({x.get('Duration', '')})"
     for x in experience]) + """
 
 Certifications:
 """ + "\n".join([
-    f"- {c.get('Name')} from {c.get('Issuer')} ({c.get('Year')})"
+    f"- {c.get('Name', '')} from {c.get('Issuer', '')} ({c.get('Year', '')})"
     for c in certifications]) + f"""
 
 Links: {', '.join(links)}
