@@ -8,7 +8,6 @@ import fitz  # PyMuPDF
 import tempfile
 import traceback
 import re
-
 from flask_bcrypt import Bcrypt
 from flask_jwt_extended import (
     JWTManager, create_access_token, jwt_required, get_jwt_identity
@@ -130,19 +129,14 @@ def update_resume(id):
     resumes.update_one({"_id": ObjectId(id)}, {"$set": updated_data})
     return jsonify({"msg": "Resume updated successfully!"})
 
-import re  # make sure to import re at the top of your file if not already
-
-app.route("/profile", methods=["POST"])
+@app.route("/profile", methods=["POST"])
 @jwt_required()
 def add_manual_resume():
     data = request.json
 
-    # Personal info
-    name = data.get("name", "")
+    name = data.get("fullName", "")
     email = data.get("email", "")
-    phone = data.get("phone", "")
-
-    # Other sections
+    phone = data.get("phoneNumber", "")
     skills = data.get("skills", [])
     education = data.get("education", [])
     experience = data.get("experience", [])
@@ -152,24 +146,16 @@ def add_manual_resume():
     summary = data.get("summary", "")
     total_years = data.get("totalYearsOverall", "")
 
-    # Validate personal info
+    # Validate basic info
     if not isinstance(name, str) or any(char.isdigit() for char in name):
-        return jsonify({"msg": "Invalid name: must be a string without numbers."}), 400
+        return jsonify({"msg": "Invalid name"}), 400
     email_regex = r"[^@]+@[^@]+\.[^@]+"
-    if not isinstance(email, str) or not re.match(email_regex, email):
-        return jsonify({"msg": "Invalid email format."}), 400
-    if not isinstance(phone, str) or not phone.isdigit():
-        return jsonify({"msg": "Invalid phone: digits only."}), 400
+    if not re.match(email_regex, email):
+        return jsonify({"msg": "Invalid email"}), 400
+    if not phone.isdigit():
+        return jsonify({"msg": "Phone must be digits only"}), 400
 
-    # Validate arrays and strings
-    if not isinstance(skills, list):
-        return jsonify({"msg": "Skills must be a list of strings."}), 400
-    if not isinstance(links, list):
-        return jsonify({"msg": "Links must be a list of strings."}), 400
-    if not isinstance(summary, str):
-        return jsonify({"msg": "Summary must be a string."}), 400
-
-    # Build resumeText (flattened summary)
+    # Construct resumeText
     resume_text = f"""
 Name: {name}
 Email: {email}
@@ -177,23 +163,30 @@ Phone: {phone}
 Skills: {', '.join(skills)}
 
 Education:
-""" + "\n".join([f"- {e.get('degree')} from {e.get('institution')} ({e.get('year')}) - {e.get('gradeType')}: {e.get('gradeValue')}" for e in education]) + """
+""" + "\n".join([
+    f"- {e.get('degree')} at {e.get('institution')} ({e.get('year')}) - {e.get('gradeType')}: {e.get('CGPA')} | Achievements: {e.get('achievements')}"
+    for e in education]) + """
 
 Projects:
-""" + "\n".join([f"- {p.get('name')}: {p.get('description')} [{p.get('technologies')}]" for p in projects]) + """
+""" + "\n".join([
+    f"- {p.get('name')}: {p.get('description')} using {p.get('technologies')} | Project URL: {p.get('projectUrl')} | GitHub: {p.get('githubUrl')}"
+    for p in projects]) + """
 
 Experience:
-""" + "\n".join([f"- {x.get('title')} at {x.get('company')} ({x.get('duration')}): {x.get('description')}" for x in experience]) + f"""
+""" + "\n".join([
+    f"- {x.get('title')} at {x.get('company')} ({x.get('duration')}) - {x.get('description')}"
+    for x in experience]) + """
 
 Certifications:
-""" + "\n".join([f"- {c.get('name')} from {c.get('issuingOrganisation')} ({c.get('year')})" for c in certifications]) + f"""
+""" + "\n".join([
+    f"- {c.get('name')} from {c.get('issuer')} ({c.get('year')})"
+    for c in certifications]) + f"""
 
 Links: {', '.join(links)}
 Summary: {summary}
 Total Experience: {total_years} years
 """.strip()
 
-    # Final document
     resume = {
         "name": name,
         "email": email,
@@ -210,7 +203,6 @@ Total Experience: {total_years} years
         "submitted_by": get_jwt_identity()
     }
 
-    # Save to DB
     result = resumes.insert_one(resume)
     return jsonify({"msg": "Profile saved", "id": str(result.inserted_id)}), 201
 
