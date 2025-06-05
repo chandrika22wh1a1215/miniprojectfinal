@@ -134,13 +134,22 @@ def update_resume(id):
 def add_manual_resume():
     data = request.json
 
-    # Extract nested personal info
+    # Mandatory section: personalInfo
     personal_info = data.get("personalInfo", {})
     name = personal_info.get("fullName", "")
     email = personal_info.get("email", "")
     phone = personal_info.get("phoneNumber", "")
 
-    # Other sections
+    # Validate personal info
+    if not name or not isinstance(name, str) or any(char.isdigit() for char in name):
+        return jsonify({"msg": "Invalid name"}), 400
+    email_regex = r"[^@]+@[^@]+\.[^@]+"
+    if not email or not isinstance(email, str) or not re.match(email_regex, email):
+        return jsonify({"msg": "Invalid email"}), 400
+    if not phone or not isinstance(phone, str) or not phone.isdigit():
+        return jsonify({"msg": "Phone must be digits only"}), 400
+
+    # Optional sections
     skills = data.get("skills", [])
     education = data.get("education", [])
     experience = data.get("experience", [])
@@ -149,15 +158,6 @@ def add_manual_resume():
     links = data.get("links", [])
     summary = data.get("summary", "")
     total_years = data.get("totalYearsOverall", "")
-
-    # Validate basic info
-    if not isinstance(name, str) or any(char.isdigit() for char in name):
-        return jsonify({"msg": "Invalid name"}), 400
-    email_regex = r"[^@]+@[^@]+\.[^@]+"
-    if not isinstance(email, str) or not re.match(email_regex, email):
-        return jsonify({"msg": "Invalid email"}), 400
-    if not isinstance(phone, str) or not phone.isdigit():
-        return jsonify({"msg": "Phone must be digits only"}), 400
 
     # Construct resumeText
     resume_text = f"""
@@ -208,8 +208,7 @@ Total Experience: {total_years} years
     }
 
     result = resumes.insert_one(resume)
-    return jsonify({"msg": "Profile saved", "id": str(result.inserted_id)}), 201
-
+    return jsonify({"msg": "Profile saved", "id": str(result.inserted_id)}),
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0")
