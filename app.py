@@ -129,38 +129,41 @@ def update_resume(id):
     resumes.update_one({"_id": ObjectId(id)}, {"$set": updated_data})
     return jsonify({"msg": "Resume updated successfully!"})
 
+import traceback  # make sure at the top
+
 @app.route("/profile", methods=["POST"])
 @jwt_required()
 def add_manual_resume():
-    data = request.json
+    try:
+        data = request.json
 
-    # Mandatory section: personalInfo
-    personal_info = data.get("personalInfo", {})
-    name = personal_info.get("fullName", "")
-    email = personal_info.get("email", "")
-    phone = personal_info.get("phoneNumber", "")
+        # Mandatory section: personalInfo
+        personal_info = data.get("personalInfo", {})
+        name = personal_info.get("fullName", "")
+        email = personal_info.get("email", "")
+        phone = personal_info.get("phoneNumber", "")
 
-    # Validate personal info
-    if not name or not isinstance(name, str) or any(char.isdigit() for char in name):
-        return jsonify({"msg": "Invalid name"}), 400
-    email_regex = r"[^@]+@[^@]+\.[^@]+"
-    if not email or not isinstance(email, str) or not re.match(email_regex, email):
-        return jsonify({"msg": "Invalid email"}), 400
-    if not phone or not isinstance(phone, str) or not phone.isdigit():
-        return jsonify({"msg": "Phone must be digits only"}), 400
+        # Validate personal info
+        if not name or not isinstance(name, str) or any(char.isdigit() for char in name):
+            return jsonify({"msg": "Invalid name"}), 400
+        email_regex = r"[^@]+@[^@]+\.[^@]+"
+        if not email or not isinstance(email, str) or not re.match(email_regex, email):
+            return jsonify({"msg": "Invalid email"}), 400
+        if not phone or not isinstance(phone, str) or not phone.isdigit():
+            return jsonify({"msg": "Phone must be digits only"}), 400
 
-    # Optional sections
-    skills = data.get("skills", [])
-    education = data.get("education", [])
-    experience = data.get("experience", [])
-    certifications = data.get("certifications", [])
-    projects = data.get("projects", [])
-    links = data.get("links", [])
-    summary = data.get("summary", "")
-    total_years = data.get("totalYearsOverall", "")
+        # Optional sections
+        skills = data.get("skills", [])
+        education = data.get("education", [])
+        experience = data.get("experience", [])
+        certifications = data.get("certifications", [])
+        projects = data.get("projects", [])
+        links = data.get("links", [])
+        summary = data.get("summary", "")
+        total_years = data.get("totalYearsOverall", "")
 
-    # Construct resumeText
-    resume_text = f"""
+        # Construct resumeText
+        resume_text = f"""
 Name: {name}
 Email: {email}
 Phone: {phone}
@@ -191,24 +194,28 @@ Summary: {summary}
 Total Experience: {total_years} years
 """.strip()
 
-    resume = {
-        "name": name,
-        "email": email,
-        "phone": phone,
-        "skills": skills,
-        "education": education,
-        "experience": experience,
-        "certifications": certifications,
-        "projects": projects,
-        "links": links,
-        "summary": summary,
-        "totalYearsOverall": total_years,
-        "resumeText": resume_text,
-        "submitted_by": get_jwt_identity()
-    }
+        resume = {
+            "name": name,
+            "email": email,
+            "phone": phone,
+            "skills": skills,
+            "education": education,
+            "experience": experience,
+            "certifications": certifications,
+            "projects": projects,
+            "links": links,
+            "summary": summary,
+            "totalYearsOverall": total_years,
+            "resumeText": resume_text,
+            "submitted_by": get_jwt_identity()
+        }
 
-    result = resumes.insert_one(resume)
-    return jsonify({"msg": "Profile saved", "id": str(result.inserted_id)}),
+        result = resumes.insert_one(resume)
+        return jsonify({"msg": "Profile saved", "id": str(result.inserted_id)}), 201
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"msg": f"Internal Server Error: {str(e)}"}), 500
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0")
