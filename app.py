@@ -137,61 +137,83 @@ import re  # make sure to import re at the top of your file if not already
 def add_manual_resume():
     data = request.json
 
-    name = data.get("name", "")
-    email = data.get("email", "")
-    phone = data.get("phone", "")
-    skills = data.get("skills", "")
-    education = data.get("education", "")
-    experience = data.get("experience", "")
-    certifications = data.get("certifications", "")
-    projects = data.get("projects", "")
-    links = data.get("links", "")
-    summary = data.get("summary", "")
+    # Personal Information
+    personal_info = data.get("personalInformation", {})
+    name = personal_info.get("fullName", "")
+    email = personal_info.get("email", "")
+    phone = personal_info.get("phoneNumber", "")
 
-    # Validate constraints
+    # Validate name, email, phone
     if not isinstance(name, str) or any(char.isdigit() for char in name):
         return jsonify({"msg": "Invalid name: must be a string without numbers."}), 400
-    email_regex = r"[^@]+@[^@]+\.[^@]+"
-    if not isinstance(email, str) or not re.match(email_regex, email):
+    if not isinstance(email, str) or not re.match(r"[^@]+@[^@]+\.[^@]+", email):
         return jsonify({"msg": "Invalid email format."}), 400
     if not isinstance(phone, str) or not phone.isdigit():
         return jsonify({"msg": "Invalid phone: digits only."}), 400
 
-    for field_name, field_value in [
-        ("skills", skills), ("education", education), ("experience", experience),
-        ("certifications", certifications), ("projects", projects),
-        ("links", links), ("summary", summary)
-    ]:
+    # Other fields
+    skills = data.get("skills", "")
+    education = data.get("education", [])
+    projects = data.get("projects", [])
+    experience = data.get("experience", [])
+    certifications = data.get("certifications", [])
+    links = data.get("links", "")
+    summary = data.get("summary", "")
+
+    # Validate non-list string fields
+    for field_name, field_value in [("skills", skills), ("links", links), ("summary", summary)]:
         if not isinstance(field_value, str):
             return jsonify({"msg": f"Invalid {field_name}: must be a string."}), 400
 
-    # Auto-generate resumeText from all fields
+    # Validate list fields
+    for field_name, field_value in [
+        ("education", education), ("projects", projects),
+        ("experience", experience), ("certifications", certifications)
+    ]:
+        if not isinstance(field_value, list):
+            return jsonify({"msg": f"Invalid {field_name}: must be a list."}), 400
+
+    # Build resumeText from nested data
     resume_text = f"""
 Name: {name}
 Email: {email}
 Phone: {phone}
 Skills: {skills}
-Education: {education}
-Experience: {experience}
-Certifications: {certifications}
-Projects: {projects}
-Links: {links}
-Summary: {summary}
-""".strip()
+
+Education:
+"""
+    for edu in education:
+        resume_text += f"- {edu.get('degree', '')}, {edu.get('institution', '')}, {edu.get('year', '')}, Grade: {edu.get('grade', '')} ({edu.get('type', '')})\n"
+
+    resume_text += "\nProjects:\n"
+    for proj in projects:
+        resume_text += f"- {proj.get('projectName', '')}: {proj.get('description', '')}, Tech: {proj.get('technologiesUsed', '')}, GitHub: {proj.get('githubURL', '')}, URL: {proj.get('projectURL', '')}\n"
+
+    resume_text += "\nExperience:\n"
+    for exp in experience:
+        resume_text += f"- {exp.get('jobTitle', '')} at {exp.get('company', '')} ({exp.get('duration', '')}), {exp.get('description', '')}, {exp.get('totalYears', '')} years overall\n"
+
+    resume_text += "\nCertifications:\n"
+    for cert in certifications:
+        resume_text += f"- {cert.get('certificationName', '')} from {cert.get('issuingOrganisation', '')}, Year: {cert.get('year', '')}\n"
+
+    resume_text += f"\nLinks: {links}\nSummary: {summary.strip()}"
 
     resume = {
-        "name": name,
-        "email": email,
-        "phone": phone,
+        "personalInformation": {
+            "fullName": name,
+            "email": email,
+            "phoneNumber": phone
+        },
         "skills": skills,
         "education": education,
+        "projects": projects,
         "experience": experience,
         "certifications": certifications,
-        "projects": projects,
         "links": links,
         "summary": summary,
-        "resumeText": resume_text,
-        "submitted_by": get_jwt_identity()
+        "resumeText": resume_text.strip(),
+        "submitted_by": get_jwt_identity(),
     }
 
     result = resumes.insert_one(resume)
