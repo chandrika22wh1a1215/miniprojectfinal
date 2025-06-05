@@ -132,43 +132,40 @@ def update_resume(id):
 import traceback  # make sure at the top
 
 @app.route("/profile", methods=["POST"])
-@jwt_required()
+# @jwt_required()  # Temporarily disabled
 def add_manual_resume():
     try:
+        print("📥 Received POST /profile")
+        print("🧾 Content-Type:", request.content_type)
+        print("📦 JSON Body:", request.get_json())
+
         data = request.json
-        print("Received JSON:", data)  # Debugging log
 
-        # --- Validate and extract personalInfo ---
-        personal_info = data.get("personalInfo")
-        if not isinstance(personal_info, dict):
-            return jsonify({"msg": "Invalid or missing personalInfo"}), 400
+        personal_info = data.get("personalInfo", {})
+        name = personal_info.get("fullName", "")
+        email = personal_info.get("email", "")
+        phone = personal_info.get("phoneNumber", "")
 
-        name = personal_info.get("fullName", "").strip()
-        email = personal_info.get("email", "").strip()
-        phone = personal_info.get("phoneNumber", "").strip()
+        print(f"✅ Name: {name}, Email: {email}, Phone: {phone}")
 
-        # --- Basic validation ---
-        if not name or not isinstance(name, str) or any(char.isdigit() for char in name):
+        # Validate personal info
+        if not name or any(char.isdigit() for char in name):
             return jsonify({"msg": "Invalid name"}), 400
-
-        email_regex = r"[^@]+@[^@]+\.[^@]+"
-        if not email or not re.match(email_regex, email):
+        if not email or not re.match(r"[^@]+@[^@]+\.[^@]+", email):
             return jsonify({"msg": "Invalid email"}), 400
-
         if not phone or not phone.isdigit():
             return jsonify({"msg": "Phone must be digits only"}), 400
 
-        # --- Optional fields (use default values safely) ---
-        skills = data.get("skills") or []
-        education = data.get("education") or []
-        experience = data.get("experience") or []
-        certifications = data.get("certifications") or []
-        projects = data.get("projects") or []
-        links = data.get("links") or []
-        summary = data.get("summary") or ""
-        total_years = data.get("totalYearsOverall") or ""
+        # Optional fields
+        skills = data.get("skills", [])
+        education = data.get("education", [])
+        experience = data.get("experience", [])
+        certifications = data.get("certifications", [])
+        projects = data.get("projects", [])
+        links = data.get("links", [])
+        summary = data.get("summary", "")
+        total_years = data.get("totalYearsOverall", "")
 
-        # --- Construct resumeText ---
         resume_text = f"""
 Name: {name}
 Email: {email}
@@ -177,22 +174,22 @@ Skills: {', '.join(skills)}
 
 Education:
 """ + "\n".join([
-    f"- {e.get('degree', '')} at {e.get('institution', '')} ({e.get('year', '')}) - {e.get('gradeType', '')}: {e.get('CGPA', '')} | Achievements: {e.get('achievements', '')}"
+    f"- {e.get('degree')} at {e.get('institution')} ({e.get('year')})"
     for e in education]) + """
 
 Projects:
 """ + "\n".join([
-    f"- {p.get('name', '')}: {p.get('description', '')} using {p.get('technologies', '')} | Project URL: {p.get('projectUrl', '')} | GitHub: {p.get('githubUrl', '')}"
+    f"- {p.get('name')}: {p.get('description')} using {p.get('technologies')}"
     for p in projects]) + """
 
 Experience:
 """ + "\n".join([
-    f"- {x.get('title', '')} at {x.get('company', '')} ({x.get('duration', '')}) - {x.get('description', '')}"
+    f"- {x.get('title')} at {x.get('company')} ({x.get('duration')})"
     for x in experience]) + """
 
 Certifications:
 """ + "\n".join([
-    f"- {c.get('name', '')} from {c.get('issuer', '')} ({c.get('year', '')})"
+    f"- {c.get('name')} from {c.get('issuer')} ({c.get('year')})"
     for c in certifications]) + f"""
 
 Links: {', '.join(links)}
@@ -213,16 +210,18 @@ Total Experience: {total_years} years
             "summary": summary,
             "totalYearsOverall": total_years,
             "resumeText": resume_text,
-            "submitted_by": get_jwt_identity()
+            "submitted_by": "test-user"
         }
 
         result = resumes.insert_one(resume)
+        print("✅ Inserted into DB with ID:", result.inserted_id)
         return jsonify({"msg": "Profile saved", "id": str(result.inserted_id)}), 201
 
     except Exception as e:
         import traceback
         traceback.print_exc()
         return jsonify({"msg": f"Internal Server Error: {str(e)}"}), 500
+
 
 
 if __name__ == "__main__":
