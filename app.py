@@ -134,9 +134,13 @@ def update_resume(id):
 def add_manual_resume():
     data = request.json
 
-    name = data.get("fullName", "")
-    email = data.get("email", "")
-    phone = data.get("phoneNumber", "")
+    # Extract nested personal info
+    personal_info = data.get("personalInfo", {})
+    name = personal_info.get("fullName", "")
+    email = personal_info.get("email", "")
+    phone = personal_info.get("phoneNumber", "")
+
+    # Other sections
     skills = data.get("skills", [])
     education = data.get("education", [])
     experience = data.get("experience", [])
@@ -150,9 +154,9 @@ def add_manual_resume():
     if not isinstance(name, str) or any(char.isdigit() for char in name):
         return jsonify({"msg": "Invalid name"}), 400
     email_regex = r"[^@]+@[^@]+\.[^@]+"
-    if not re.match(email_regex, email):
+    if not isinstance(email, str) or not re.match(email_regex, email):
         return jsonify({"msg": "Invalid email"}), 400
-    if not phone.isdigit():
+    if not isinstance(phone, str) or not phone.isdigit():
         return jsonify({"msg": "Phone must be digits only"}), 400
 
     # Construct resumeText
@@ -205,6 +209,7 @@ Total Experience: {total_years} years
 
     result = resumes.insert_one(resume)
     return jsonify({"msg": "Profile saved", "id": str(result.inserted_id)}), 201
+
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0")
