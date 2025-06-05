@@ -132,92 +132,87 @@ def update_resume(id):
 
 import re  # make sure to import re at the top of your file if not already
 
-@app.route("/profile", methods=["POST"])
+app.route("/profile", methods=["POST"])
 @jwt_required()
 def add_manual_resume():
     data = request.json
 
-    # Personal Information
-    personal_info = data.get("personalInformation", {})
-    name = personal_info.get("fullName", "")
-    email = personal_info.get("email", "")
-    phone = personal_info.get("phoneNumber", "")
+    # Personal info
+    name = data.get("name", "")
+    email = data.get("email", "")
+    phone = data.get("phone", "")
 
-    # Validate name, email, phone
+    # Other sections
+    skills = data.get("skills", [])
+    education = data.get("education", [])
+    experience = data.get("experience", [])
+    certifications = data.get("certifications", [])
+    projects = data.get("projects", [])
+    links = data.get("links", [])
+    summary = data.get("summary", "")
+    total_years = data.get("totalYearsOverall", "")
+
+    # Validate personal info
     if not isinstance(name, str) or any(char.isdigit() for char in name):
         return jsonify({"msg": "Invalid name: must be a string without numbers."}), 400
-    if not isinstance(email, str) or not re.match(r"[^@]+@[^@]+\.[^@]+", email):
+    email_regex = r"[^@]+@[^@]+\.[^@]+"
+    if not isinstance(email, str) or not re.match(email_regex, email):
         return jsonify({"msg": "Invalid email format."}), 400
     if not isinstance(phone, str) or not phone.isdigit():
         return jsonify({"msg": "Invalid phone: digits only."}), 400
 
-    # Other fields
-    skills = data.get("skills", "")
-    education = data.get("education", [])
-    projects = data.get("projects", [])
-    experience = data.get("experience", [])
-    certifications = data.get("certifications", [])
-    links = data.get("links", "")
-    summary = data.get("summary", "")
+    # Validate arrays and strings
+    if not isinstance(skills, list):
+        return jsonify({"msg": "Skills must be a list of strings."}), 400
+    if not isinstance(links, list):
+        return jsonify({"msg": "Links must be a list of strings."}), 400
+    if not isinstance(summary, str):
+        return jsonify({"msg": "Summary must be a string."}), 400
 
-    # Validate non-list string fields
-    for field_name, field_value in [("skills", skills), ("links", links), ("summary", summary)]:
-        if not isinstance(field_value, str):
-            return jsonify({"msg": f"Invalid {field_name}: must be a string."}), 400
-
-    # Validate list fields
-    for field_name, field_value in [
-        ("education", education), ("projects", projects),
-        ("experience", experience), ("certifications", certifications)
-    ]:
-        if not isinstance(field_value, list):
-            return jsonify({"msg": f"Invalid {field_name}: must be a list."}), 400
-
-    # Build resumeText from nested data
+    # Build resumeText (flattened summary)
     resume_text = f"""
 Name: {name}
 Email: {email}
 Phone: {phone}
-Skills: {skills}
+Skills: {', '.join(skills)}
 
 Education:
-"""
-    for edu in education:
-        resume_text += f"- {edu.get('degree', '')}, {edu.get('institution', '')}, {edu.get('year', '')}, Grade: {edu.get('grade', '')} ({edu.get('type', '')})\n"
+""" + "\n".join([f"- {e.get('degree')} from {e.get('institution')} ({e.get('year')}) - {e.get('gradeType')}: {e.get('gradeValue')}" for e in education]) + """
 
-    resume_text += "\nProjects:\n"
-    for proj in projects:
-        resume_text += f"- {proj.get('projectName', '')}: {proj.get('description', '')}, Tech: {proj.get('technologiesUsed', '')}, GitHub: {proj.get('githubURL', '')}, URL: {proj.get('projectURL', '')}\n"
+Projects:
+""" + "\n".join([f"- {p.get('name')}: {p.get('description')} [{p.get('technologies')}]" for p in projects]) + """
 
-    resume_text += "\nExperience:\n"
-    for exp in experience:
-        resume_text += f"- {exp.get('jobTitle', '')} at {exp.get('company', '')} ({exp.get('duration', '')}), {exp.get('description', '')}, {exp.get('totalYears', '')} years overall\n"
+Experience:
+""" + "\n".join([f"- {x.get('title')} at {x.get('company')} ({x.get('duration')}): {x.get('description')}" for x in experience]) + f"""
 
-    resume_text += "\nCertifications:\n"
-    for cert in certifications:
-        resume_text += f"- {cert.get('certificationName', '')} from {cert.get('issuingOrganisation', '')}, Year: {cert.get('year', '')}\n"
+Certifications:
+""" + "\n".join([f"- {c.get('name')} from {c.get('issuingOrganisation')} ({c.get('year')})" for c in certifications]) + f"""
 
-    resume_text += f"\nLinks: {links}\nSummary: {summary.strip()}"
+Links: {', '.join(links)}
+Summary: {summary}
+Total Experience: {total_years} years
+""".strip()
 
+    # Final document
     resume = {
-        "personalInformation": {
-            "fullName": name,
-            "email": email,
-            "phoneNumber": phone
-        },
+        "name": name,
+        "email": email,
+        "phone": phone,
         "skills": skills,
         "education": education,
-        "projects": projects,
         "experience": experience,
         "certifications": certifications,
+        "projects": projects,
         "links": links,
         "summary": summary,
-        "resumeText": resume_text.strip(),
-        "submitted_by": get_jwt_identity(),
+        "totalYearsOverall": total_years,
+        "resumeText": resume_text,
+        "submitted_by": get_jwt_identity()
     }
 
+    # Save to DB
     result = resumes.insert_one(resume)
-    return jsonify({"msg": "Manual resume added!", "id": str(result.inserted_id)}), 201
+    return jsonify({"msg": "Profile saved", "id": str(result.inserted_id)}), 201
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0")
