@@ -142,7 +142,7 @@ def add_manual_resume():
         data = request.json
 
         personal_info = data.get("personalInfo", {})
-        name = personal_info.get("fullName", "")
+        name = personal_info.get("FullName", "")
         email = personal_info.get("email", "")
         phone = personal_info.get("phoneNumber", "")
 
