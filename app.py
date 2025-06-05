@@ -142,9 +142,9 @@ def add_manual_resume():
         data = request.json
 
         # Top-level personal fields
-        name = data.get("Full Name", "").strip()
+        name = data.get("fullName", "").strip()
         email = data.get("email", "").strip()
-        phone = data.get("Phone Number", "").strip()
+        phone = data.get("phoneNumber", "").strip()
 
         print(f"✅ Name: {name}, Email: {email}, Phone: {phone}")
 
