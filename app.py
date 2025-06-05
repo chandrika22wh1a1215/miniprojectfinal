@@ -141,10 +141,10 @@ def add_manual_resume():
 
         data = request.json
 
-        personal_info = data.get("personalInfo", {})
+        personal_info = data.get("PersonalInfo", {})
         name = personal_info.get("FullName", "")
-        email = personal_info.get("email", "")
-        phone = personal_info.get("phoneNumber", "")
+        email = personal_info.get("Email", "")
+        phone = personal_info.get("PhoneNumber", "")
 
         print(f"✅ Name: {name}, Email: {email}, Phone: {phone}")
 
@@ -156,15 +156,15 @@ def add_manual_resume():
         if not phone or not phone.isdigit():
             return jsonify({"msg": "Phone must be digits only"}), 400
 
-        # Optional fields
-        skills = data.get("skills", [])
-        education = data.get("education", [])
-        experience = data.get("experience", [])
-        certifications = data.get("certifications", [])
-        projects = data.get("projects", [])
-        links = data.get("links", [])
-        summary = data.get("summary", "")
-        total_years = data.get("totalYearsOverall", "")
+        # Optional fields with Capital Keys
+        skills = data.get("Skills", [])
+        education = data.get("Education", [])
+        experience = data.get("Experience", [])
+        certifications = data.get("Certifications", [])
+        projects = data.get("Projects", [])
+        links = data.get("Links", [])
+        summary = data.get("Summary", "")
+        total_years = data.get("TotalYearsOverall", "")
 
         resume_text = f"""
 Name: {name}
@@ -174,22 +174,22 @@ Skills: {', '.join(skills)}
 
 Education:
 """ + "\n".join([
-    f"- {e.get('degree')} at {e.get('institution')} ({e.get('year')})"
+    f"- {e.get('Degree')} at {e.get('Institution')} ({e.get('Year')})"
     for e in education]) + """
 
 Projects:
 """ + "\n".join([
-    f"- {p.get('name')}: {p.get('description')} using {p.get('technologies')}"
+    f"- {p.get('Name')}: {p.get('Description')} using {p.get('Technologies')}"
     for p in projects]) + """
 
 Experience:
 """ + "\n".join([
-    f"- {x.get('title')} at {x.get('company')} ({x.get('duration')})"
+    f"- {x.get('Title')} at {x.get('Company')} ({x.get('Duration')})"
     for x in experience]) + """
 
 Certifications:
 """ + "\n".join([
-    f"- {c.get('name')} from {c.get('issuer')} ({c.get('year')})"
+    f"- {c.get('Name')} from {c.get('Issuer')} ({c.get('Year')})"
     for c in certifications]) + f"""
 
 Links: {', '.join(links)}
@@ -198,19 +198,19 @@ Total Experience: {total_years} years
 """.strip()
 
         resume = {
-            "name": name,
-            "email": email,
-            "phone": phone,
-            "skills": skills,
-            "education": education,
-            "experience": experience,
-            "certifications": certifications,
-            "projects": projects,
-            "links": links,
-            "summary": summary,
-            "totalYearsOverall": total_years,
-            "resumeText": resume_text,
-            "submitted_by": "test-user"
+            "Name": name,
+            "Email": email,
+            "Phone": phone,
+            "Skills": skills,
+            "Education": education,
+            "Experience": experience,
+            "Certifications": certifications,
+            "Projects": projects,
+            "Links": links,
+            "Summary": summary,
+            "TotalYearsOverall": total_years,
+            "ResumeText": resume_text,
+            "SubmittedBy": "test-user"
         }
 
         result = resumes.insert_one(resume)
@@ -221,8 +221,6 @@ Total Experience: {total_years} years
         import traceback
         traceback.print_exc()
         return jsonify({"msg": f"Internal Server Error: {str(e)}"}), 500
-
-
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0")
