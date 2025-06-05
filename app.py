@@ -142,9 +142,9 @@ def add_manual_resume():
         data = request.json
 
         personal_info = data.get("PersonalInfo", {})
-        name = personal_info.get("FullName", "")
-        email = personal_info.get("Email", "")
-        phone = personal_info.get("PhoneNumber", "")
+        name = personal_info.get("FullName", "").strip()
+        email = personal_info.get("Email", "").strip()
+        phone = personal_info.get("PhoneNumber", "").strip()
 
         print(f"✅ Name: {name}, Email: {email}, Phone: {phone}")
 
@@ -156,15 +156,21 @@ def add_manual_resume():
         if not phone or not phone.isdigit():
             return jsonify({"msg": "Phone must be digits only"}), 400
 
-        # Optional fields with Capital Keys
-        skills = data.get("Skills", [])
-        education = data.get("Education", [])
-        experience = data.get("Experience", [])
-        certifications = data.get("Certifications", [])
-        projects = data.get("Projects", [])
-        links = data.get("Links", [])
-        summary = data.get("Summary", "")
-        total_years = data.get("TotalYearsOverall", "")
+        # Clean and store only non-empty optional fields
+        def clean_list(items):
+            return [i for i in items if i and any(v for v in i.values())] if isinstance(items, list) else []
+
+        def clean_string(value):
+            return value.strip() if isinstance(value, str) and value.strip() else ""
+
+        skills = [s for s in data.get("Skills", []) if s.strip()]
+        education = clean_list(data.get("Education", []))
+        experience = clean_list(data.get("Experience", []))
+        certifications = clean_list(data.get("Certifications", []))
+        projects = clean_list(data.get("Projects", []))
+        links = [l for l in data.get("Links", []) if l.strip()]
+        summary = clean_string(data.get("Summary", ""))
+        total_years = clean_string(data.get("TotalYearsOverall", ""))
 
         resume_text = f"""
 Name: {name}
@@ -221,6 +227,7 @@ Total Experience: {total_years} years
         import traceback
         traceback.print_exc()
         return jsonify({"msg": f"Internal Server Error: {str(e)}"}), 500
+
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0")
