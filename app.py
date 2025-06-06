@@ -94,32 +94,23 @@ def send_verification_email(receiver_email, code):
         print(f"❌ Failed to send email: {e}")
 
 
-@app.route("/verify-registration", methods=["POST"])
-def verify_registration():
-    data = request.json
-    email = data.get("email")
-    code = data.get("code")
+def send_verification_email(receiver_email, code):
+    try:
+        msg = EmailMessage()
+        msg['Subject'] = 'Your Verification Code'
+        msg['From'] = '22wh1a1215@bvrithyderabad.edu.in'  # Your Gmail address
+        msg['To'] = receiver_email
+        msg.set_content(f"Your verification code is: {code}")
 
-    record = pending_verifications.find_one({"email": email})
-    if not record:
-        return jsonify({"msg": "No pending verification found for this email"}), 404
+        with smtplib.SMTP('smtp.gmail.com', 587) as smtp:
+            smtp.starttls()
+            smtp.login('22wh1a1215@bvrithyderabad.edu.in', 'lhvcjbdvwqtxwazo')  # Your Gmail + App password
+            smtp.send_message(msg)
 
-    now = datetime.datetime.utcnow()
-    if now - record["created_at"] > datetime.timedelta(minutes=10):
-        pending_verifications.delete_one({"email": email})
-        return jsonify({"msg": "Verification code expired. Please register again."}), 400
+        print(f"✅ Verification email sent to {receiver_email}")
+    except Exception as e:
+        print(f"❌ Failed to send email: {e}")
 
-    if record["verification_code"] != code:
-        return jsonify({"msg": "Invalid verification code"}), 400
-
-    users.insert_one({
-        "email": email,
-        "password": record["password"],
-        "dob": record["dob"]
-    })
-    pending_verifications.delete_one({"email": email})
-
-    return jsonify({"msg": "User verified and registered successfully"}), 201
 
 @app.route("/login", methods=["POST"])
 def login():
