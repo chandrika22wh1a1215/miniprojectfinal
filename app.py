@@ -162,14 +162,14 @@ def extract_text_pymupdf(pdf_path):
 @app.route("/register", methods=["POST"])
 def register():
     data = request.json
+    full_name = data.get("full_name")  # ✅ New field
     email = data.get("email")
     password = data.get("password")
     dob_str = data.get("dob")  # Expected format: dd-mm-yyyy
 
-    if not email or not password or not dob_str:
-        return jsonify({"msg": "Email, password and DOB required"}), 400
+    if not full_name or not email or not password or not dob_str:
+        return jsonify({"msg": "Full name, email, password and DOB required"}), 400
 
-    # Validate DOB format
     try:
         dob = datetime.strptime(dob_str, "%d-%m-%Y")
     except ValueError:
@@ -186,8 +186,9 @@ def register():
         {"email": email},
         {
             "$set": {
+                "full_name": full_name,  # ✅ Save full name
                 "password": hashed_password,
-                "dob": dob_str,  # Store as original string or dob.isoformat()
+                "dob": dob_str,
                 "verification_code": verification_code,
                 "created_at": datetime.utcnow()
             }
@@ -197,6 +198,7 @@ def register():
 
     send_verification_email(email, verification_code)
     return jsonify({"msg": "Verification code sent to your email"}), 200
+
 
 @app.route("/verify", methods=["POST"])
 def verify_code():
@@ -212,17 +214,17 @@ def verify_code():
     if record["verification_code"] != code:
         return jsonify({"msg": "Incorrect verification code"}), 400
 
-    # If verified, move to `users` collection
     users.insert_one({
+        "full_name": record.get("full_name", ""),  # ✅ Save full name to users
         "email": email,
         "password": record["password"],
         "dob": record["dob"]
     })
 
-    # Remove from pending_verifications
     pending_verifications.delete_one({"email": email})
 
     return jsonify({"msg": "Email verified and user registered!"}), 201
+
 
 
 @app.route("/upload_resume", methods=["POST"])
