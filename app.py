@@ -14,11 +14,13 @@ from flask_jwt_extended import (
 )
 
 app = Flask(__name__)
-CORS(app, origins=["https://resumefrontend-rif3.onrender.com"])  # Allow only your frontend origin
+# Allow only your frontend origin for CORS
+CORS(app, origins=["https://resumefrontend-rif3.onrender.com"])
 
+# Configurations
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024  # 2 MB upload limit
 app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY", "your-secret-key")
-app.config["JWT_ACCESS_TOKEN_EXPIRES"] = False  # Permanent tokens (no expiration)
+app.config["JWT_ACCESS_TOKEN_EXPIRES"] = False  # Tokens without expiry
 
 bcrypt = Bcrypt(app)
 jwt = JWTManager(app)
@@ -30,28 +32,18 @@ db = client["job_scraping_db"]
 resumes = db["resumes"]
 users = db["users"]
 
+# Allowed users for protected routes
 ALLOWED_USERS = {
     "22wh1a1215@bvrithyderabad.edu.in",
     "22wh1a1239@bvrithyderabad.edu.in",
     "allisarmishta@gmail.com"
 }
 
+login_attempts = {}  # Track failed login attempts
+MAX_ATTEMPTS = 3
+
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() == 'pdf'
-
-# ====== Step 1: Password Validator ======
-def validate_password(password):
-    if len(password) < 8:
-        return False, "Password must be at least 8 characters long."
-    if not re.search(r"[A-Z]", password):
-        return False, "Password must contain at least one uppercase letter."
-    if not re.search(r"[a-z]", password):
-        return False, "Password must contain at least one lowercase letter."
-    if not re.search(r"[0-9]", password):
-        return False, "Password must contain at least one digit."
-    if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
-        return False, "Password must contain at least one special character."
-    return True, ""
 
 @app.route('/')
 def home():
@@ -63,10 +55,9 @@ def register():
     email = data.get("email")
     password = data.get("password")
 
-    # Password validation
-    valid, msg = validate_password(password)
-    if not valid:
-        return jsonify({"msg": msg}), 400
+    # Password validation: at least 8 characters
+    if not password or len(password) < 8:
+        return jsonify({"msg": "Password must be at least 8 characters"}), 400
 
     if users.find_one({"email": email}):
         return jsonify({"msg": "User already exists"}), 409
@@ -80,9 +71,19 @@ def login():
     data = request.json
     email = data.get("email")
     password = data.get("password")
+
+    if email not in login_attempts:
+        login_attempts[email] = 0
+
     user = users.find_one({"email": email})
     if not user or not bcrypt.check_password_hash(user["password"], password):
+        login_attempts[email] += 1
+        if login_attempts[email] >= MAX_ATTEMPTS:
+            return jsonify({"msg": "Invalid credentials", "show_forgot": True}), 401
         return jsonify({"msg": "Invalid credentials"}), 401
+
+    # Successful login resets attempts count
+    login_attempts[email] = 0
     access_token = create_access_token(identity=email)
     return jsonify({"access_token": access_token}), 200
 
@@ -113,6 +114,7 @@ def extract_text_pymupdf(pdf_path):
     return text
 
 @app.route("/upload_resume", methods=["POST"])
+@jwt_required()
 def upload_resume():
     if 'file' not in request.files:
         return jsonify({"msg": "No file part in the request"}), 400
@@ -152,23 +154,15 @@ def update_resume(id):
     return jsonify({"msg": "Resume updated successfully!"})
 
 @app.route("/profile", methods=["POST"])
-# @jwt_required()  # Disabled for now, enable if needed
+@jwt_required()
 def add_manual_resume():
     try:
-        print("📥 Received POST /profile")
-        print("🧾 Content-Type:", request.content_type)
-        print("📦 JSON Body:", request.get_json())
-
         data = request.json
 
-        # Top-level personal fields
         name = data.get("fullName", "").strip()
         email = data.get("email", "").strip()
         phone = data.get("phoneNumber", "").strip()
 
-        print(f"✅ Name: {name}, Email: {email}, Phone: {phone}")
-
-        # Validate personal info
         if not name or any(char.isdigit() for char in name):
             return jsonify({"msg": "Invalid name"}), 400
         if not email or not re.match(r"[^@]+@[^@]+\.[^@]+", email):
@@ -176,7 +170,6 @@ def add_manual_resume():
         if not phone or not phone.isdigit():
             return jsonify({"msg": "Phone must be digits only"}), 400
 
-        # Optional fields (safe defaults)
         skills = data.get("Skills", [])
         education = data.get("Education", [])
         experience = data.get("Experience", [])
@@ -230,17 +223,15 @@ Total Experience: {total_years} years
             "Summary": summary,
             "TotalYearsOverall": total_years,
             "ResumeText": resume_text,
-            "SubmittedBy": "test-user"
+            "SubmittedBy": get_jwt_identity()
         }
 
         result = resumes.insert_one(resume)
-        print("✅ Inserted into DB with ID:", result.inserted_id)
         return jsonify({"msg": "Profile saved", "id": str(result.inserted_id)}), 201
 
     except Exception as e:
         traceback.print_exc()
         return jsonify({"msg": f"Internal Server Error: {str(e)}"}), 500
-
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0")
