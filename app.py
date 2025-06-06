@@ -15,70 +15,81 @@ from flask_jwt_extended import (
 import random
 import string
 import datetime
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 app = Flask(__name__)
-# Allow only your frontend origin for CORS
 CORS(app, origins=["https://resumefrontend-rif3.onrender.com"])
 
-# Configurations
-app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024  # 2 MB upload limit
+app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024
 app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY", "your-secret-key")
-app.config["JWT_ACCESS_TOKEN_EXPIRES"] = False  # Tokens without expiry
+app.config["JWT_ACCESS_TOKEN_EXPIRES"] = False
 
 bcrypt = Bcrypt(app)
 jwt = JWTManager(app)
 
-# MongoDB setup
 mongo_uri = "mongodb+srv://22wh1a1215:Resume@cluster0.fu4wtmw.mongodb.net/job_scraping_db?retryWrites=true&w=majority"
 client = MongoClient(mongo_uri)
 db = client["job_scraping_db"]
 resumes = db["resumes"]
 users = db["users"]
-pending_verifications = db["pending_verifications"]  # New collection for pending verifications
+pending_verifications = db["pending_verifications"]
 
-# Allowed users for protected routes
 ALLOWED_USERS = {
     "22wh1a1215@bvrithyderabad.edu.in",
     "22wh1a1239@bvrithyderabad.edu.in",
     "allisarmishta@gmail.com"
 }
 
-login_attempts = {}  # Track failed login attempts
+login_attempts = {}
 MAX_ATTEMPTS = 3
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() == 'pdf'
 
+def send_verification_email(to_email, code):
+    sender_email = os.getenv("EMAIL_USER")
+    sender_pass = os.getenv("EMAIL_PASS")
+    subject = "Your Verification Code"
+    body = f"Your verification code is: {code}"
+
+    msg = MIMEMultipart()
+    msg["From"] = sender_email
+    msg["To"] = to_email
+    msg["Subject"] = subject
+    msg.attach(MIMEText(body, "plain"))
+
+    try:
+        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+            server.starttls()
+            server.login(sender_email, sender_pass)
+            server.sendmail(sender_email, to_email, msg.as_string())
+        print(f"Email sent to {to_email}")
+    except Exception as e:
+        print(f"Error sending email: {e}")
+
 @app.route('/')
 def home():
     return "Flask app is running!"
 
-# --------------------
-# Registration with verification code generation
 @app.route("/register", methods=["POST"])
 def register():
     data = request.json
     email = data.get("email")
     password = data.get("password")
 
-    # Password validation: at least 8 characters
     if not password or len(password) < 8:
         return jsonify({"msg": "Password must be at least 8 characters"}), 400
 
-    # Check if user already exists (verified)
     if users.find_one({"email": email}):
         return jsonify({"msg": "User already exists"}), 409
 
-    # Check if pending verification exists for this email, remove it to reset code
     pending_verifications.delete_many({"email": email})
 
-    # Generate 6-digit numeric verification code
     verification_code = ''.join(random.choices(string.digits, k=6))
-
-    # Hash the password but DO NOT create user yet - wait for verification
     hashed_pw = bcrypt.generate_password_hash(password).decode('utf-8')
 
-    # Store verification info in pending_verifications collection with timestamp
     pending_verifications.insert_one({
         "email": email,
         "password": hashed_pw,
@@ -86,12 +97,10 @@ def register():
         "created_at": datetime.datetime.utcnow()
     })
 
-    # For now, simulate sending email by printing the code in console (replace this with actual email service)
-    print(f"Verification code for {email}: {verification_code}")
+    send_verification_email(email, verification_code)
 
-    return jsonify({"msg": "Verification code sent to your email (check console in dev)"}), 200
+    return jsonify({"msg": "Verification code sent to your email"}), 200
 
-# Verification endpoint
 @app.route("/verify-registration", methods=["POST"])
 def verify_registration():
     data = request.json
@@ -99,11 +108,9 @@ def verify_registration():
     code = data.get("code")
 
     record = pending_verifications.find_one({"email": email})
-
     if not record:
         return jsonify({"msg": "No pending verification found for this email"}), 404
 
-    # Optional: check if code expired - for example after 10 minutes
     now = datetime.datetime.utcnow()
     if now - record["created_at"] > datetime.timedelta(minutes=10):
         pending_verifications.delete_one({"email": email})
@@ -112,19 +119,14 @@ def verify_registration():
     if record["verification_code"] != code:
         return jsonify({"msg": "Invalid verification code"}), 400
 
-    # Create the actual user in users collection
     users.insert_one({
         "email": email,
         "password": record["password"]
     })
-
-    # Remove the pending verification record
     pending_verifications.delete_one({"email": email})
 
     return jsonify({"msg": "User verified and registered successfully"}), 201
 
-# --------------------
-# Login remains unchanged
 @app.route("/login", methods=["POST"])
 def login():
     data = request.json
@@ -141,13 +143,9 @@ def login():
             return jsonify({"msg": "Invalid credentials", "show_forgot": True}), 401
         return jsonify({"msg": "Invalid credentials"}), 401
 
-    # Successful login resets attempts count
     login_attempts[email] = 0
     access_token = create_access_token(identity=email)
     return jsonify({"access_token": access_token}), 200
-
-# --------------------
-# Other routes remain unchanged
 
 @app.route("/resumes", methods=["GET"])
 @jwt_required()
@@ -294,7 +292,6 @@ Total Experience: {total_years} years
     except Exception as e:
         traceback.print_exc()
         return jsonify({"msg": f"Internal Server Error: {str(e)}"}), 500
-
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0")
