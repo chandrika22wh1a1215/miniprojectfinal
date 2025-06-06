@@ -19,7 +19,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.message import EmailMessage
-
+from datetime import datetime
 
 app = Flask(__name__)
 CORS(app, origins=["https://resumefrontend-rif3.onrender.com"])
@@ -164,21 +164,28 @@ def extract_text_pymupdf(pdf_path):
         text += page.get_text()
     return text
 
+
 @app.route("/register", methods=["POST"])
 def register():
     data = request.json
     email = data.get("email")
     password = data.get("password")
+    dob_str = data.get("dob")  # Expected format: dd-mm-yyyy
 
-    if not email or not password:
-        return jsonify({"msg": "Email and password required"}), 400
+    if not email or not password or not dob_str:
+        return jsonify({"msg": "Email, password and DOB required"}), 400
+
+    # Validate DOB format
+    try:
+        dob = datetime.strptime(dob_str, "%d-%m-%Y")
+    except ValueError:
+        return jsonify({"msg": "DOB must be in dd-mm-yyyy format"}), 400
 
     existing_user = users.find_one({"email": email})
     if existing_user:
         return jsonify({"msg": "User already registered"}), 409
 
     hashed_password = bcrypt.generate_password_hash(password).decode("utf-8")
-
     verification_code = ''.join(random.choices(string.digits, k=6))
 
     pending_verifications.update_one(
@@ -186,16 +193,16 @@ def register():
         {
             "$set": {
                 "password": hashed_password,
+                "dob": dob_str,  # Store as original string or dob.isoformat()
                 "verification_code": verification_code,
-                "created_at": datetime.datetime.utcnow()
+                "created_at": datetime.utcnow()
             }
         },
         upsert=True
     )
 
     send_verification_email(email, verification_code)
-    return jsonify({"msg": "Verification code sent to email"}), 200
-
+    return jsonify({"msg": "Verification code sent to your email"}), 200
 
 @app.route("/upload_resume", methods=["POST"])
 @jwt_required()
