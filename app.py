@@ -49,7 +49,29 @@ MAX_ATTEMPTS = 3
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() == 'pdf'
-    
+
+def send_verification_email(receiver_email, code):
+    try:
+        msg = EmailMessage()
+        msg['Subject'] = 'Your Verification Code'
+        msg['From'] = '8f06f4002@smtp-brevo.com'  # Your Brevo email
+        msg['To'] = receiver_email
+        msg.set_content(f"Your verification code is: {code}")
+
+        with smtplib.SMTP('smtp-relay.brevo.com', 587) as smtp:
+            smtp.starttls()
+            smtp.login('8f06f4002@smtp-brevo.com', 'g5OsRyTUfJnXtM96')  # Use your credentials
+            smtp.send_message(msg)
+
+        print(f"✅ Verification email sent to {receiver_email}")
+    except Exception as e:
+        print(f"❌ Failed to send email: {e}")
+
+
+@app.route('/')
+def home():
+    return "Flask app is running!"
+
 def send_verification_email(receiver_email, code):
     try:
         print(f"⚙️ Preparing to send email to {receiver_email} with code {code}")
@@ -69,39 +91,6 @@ def send_verification_email(receiver_email, code):
     except Exception as e:
         print(f"❌ Failed to send email: {e}")
 
-
-
-@app.route('/')
-def home():
-    return "Flask app is running!"
-
-@app.route("/register", methods=["POST"])
-def register():
-    data = request.json
-    email = data.get("email")
-    password = data.get("password")
-
-    if not password or len(password) < 8:
-        return jsonify({"msg": "Password must be at least 8 characters"}), 400
-
-    if users.find_one({"email": email}):
-        return jsonify({"msg": "User already exists"}), 409
-
-    pending_verifications.delete_many({"email": email})
-
-    verification_code = ''.join(random.choices(string.digits, k=6))
-    hashed_pw = bcrypt.generate_password_hash(password).decode('utf-8')
-
-    pending_verifications.insert_one({
-        "email": email,
-        "password": hashed_pw,
-        "verification_code": verification_code,
-        "created_at": datetime.datetime.utcnow()
-    })
-
-    send_verification_email(email, verification_code)
-
-    return jsonify({"msg": "Verification code sent to your email"}), 200
 
 @app.route("/verify-registration", methods=["POST"])
 def verify_registration():
@@ -175,6 +164,39 @@ def extract_text_pymupdf(pdf_path):
         text += page.get_text()
     return text
 
+@app.route("/register", methods=["POST"])
+def register():
+    data = request.json
+    email = data.get("email")
+    password = data.get("password")
+
+    if not email or not password:
+        return jsonify({"msg": "Email and password required"}), 400
+
+    existing_user = users.find_one({"email": email})
+    if existing_user:
+        return jsonify({"msg": "User already registered"}), 409
+
+    hashed_password = bcrypt.generate_password_hash(password).decode("utf-8")
+
+    verification_code = ''.join(random.choices(string.digits, k=6))
+
+    pending_verifications.update_one(
+        {"email": email},
+        {
+            "$set": {
+                "password": hashed_password,
+                "verification_code": verification_code,
+                "created_at": datetime.datetime.utcnow()
+            }
+        },
+        upsert=True
+    )
+
+    send_verification_email(email, verification_code)
+    return jsonify({"msg": "Verification code sent to email"}), 200
+
+
 @app.route("/upload_resume", methods=["POST"])
 @jwt_required()
 def upload_resume():
@@ -232,7 +254,13 @@ def add_manual_resume():
         if not phone or not phone.isdigit():
             return jsonify({"msg": "Phone must be digits only"}), 400
 
-        skills = data.get("Skills", [])
+        soft_skills = data.get("SoftSkills", [])
+        technical_skills = data.get("TechnicalSkills", [])
+        skills = {
+            "SoftSkills": soft_skills,
+            "TechnicalSkills": technical_skills
+        }
+
         education = data.get("Education", [])
         experience = data.get("Experience", [])
         certifications = data.get("Certifications", [])
@@ -245,27 +273,29 @@ def add_manual_resume():
 Name: {name}
 Email: {email}
 Phone: {phone}
-Skills: {', '.join(skills)}
+
+Technical Skills: {', '.join(technical_skills)}
+Soft Skills: {', '.join(soft_skills)}
 
 Education:
 """ + "\n".join([
-    f"- {e.get('Degree', '')} at {e.get('Institution', '')} ({e.get('Year', '')})"
-    for e in education]) + """
+            f"- {e.get('Degree', '')} at {e.get('Institution', '')} ({e.get('Year', '')})"
+            for e in education]) + """
 
 Projects:
 """ + "\n".join([
-    f"- {p.get('Name', '')}: {p.get('Description', '')} using {p.get('Technologies', '')}"
-    for p in projects]) + """
+            f"- {p.get('Name', '')}: {p.get('Description', '')} using {p.get('Technologies', '')}"
+            for p in projects]) + """
 
 Experience:
 """ + "\n".join([
-    f"- {x.get('Title', '')} at {x.get('Company', '')} ({x.get('Duration', '')})"
-    for x in experience]) + """
+            f"- {x.get('Title', '')} at {x.get('Company', '')} ({x.get('Duration', '')})"
+            for x in experience]) + """
 
 Certifications:
 """ + "\n".join([
-    f"- {c.get('Name', '')} from {c.get('Issuer', '')} ({c.get('Year', '')})"
-    for c in certifications]) + f"""
+            f"- {c.get('Name', '')} from {c.get('Issuer', '')} ({c.get('Year', '')})"
+            for c in certifications]) + f"""
 
 Links: {', '.join(links)}
 Summary: {summary}
@@ -295,5 +325,7 @@ Total Experience: {total_years} years
         traceback.print_exc()
         return jsonify({"msg": f"Internal Server Error: {str(e)}"}), 500
 
+
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0")
+    app.run(debug=True, host="0.0.0.0", port=5000)
+
