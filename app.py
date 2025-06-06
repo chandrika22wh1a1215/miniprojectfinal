@@ -158,35 +158,50 @@ def extract_text_pymupdf(pdf_path):
         text += page.get_text()
     return text
 
+import re  # Add this at the top if not already
 
 @app.route("/register", methods=["POST"])
 def register():
     data = request.json
-    full_name = data.get("full_name")  # ✅ New field
+    full_name = data.get("full_name")
     email = data.get("email")
     password = data.get("password")
-    dob_str = data.get("dob")  # Expected format: dd-mm-yyyy
+    dob_str = data.get("dob")
 
     if not full_name or not email or not password or not dob_str:
-        return jsonify({"msg": "Full name, email, password and DOB required"}), 400
+        return jsonify({"error": "Full name, email, password and DOB required"}), 400
+
+    # ✅ Password strength validation
+    password_regex = r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*])[A-Za-z\d!@#$%^&*]{8,}$'
+    if not re.match(password_regex, password):
+        return jsonify({
+            "error": "Password must be at least 8 characters long and include at least one uppercase letter, one lowercase letter, one digit, and one special character (!@#$%^&*)."
+        }), 400
+
+    confirm_password = data.get("confirm_password")
+
+    if password != confirm_password:
+        return jsonify({"error": "Passwords do not match"}), 400
+
 
     try:
         dob = datetime.strptime(dob_str, "%d-%m-%Y")
     except ValueError:
-        return jsonify({"msg": "DOB must be in dd-mm-yyyy format"}), 400
+        return jsonify({"error": "DOB must be in dd-mm-yyyy format"}), 400
 
     existing_user = users.find_one({"email": email})
     if existing_user:
-        return jsonify({"msg": "User already registered"}), 409
+        return jsonify({"error": "User already registered"}), 409
 
     hashed_password = bcrypt.generate_password_hash(password).decode("utf-8")
     verification_code = ''.join(random.choices(string.digits, k=6))
 
+    expires_at = datetime.utcnow() + timedelta(minutes=10)
     pending_verifications.update_one(
         {"email": email},
         {
             "$set": {
-                "full_name": full_name,  # ✅ Save full name
+                "full_name": full_name,
                 "password": hashed_password,
                 "dob": dob_str,
                 "verification_code": verification_code,
@@ -197,7 +212,7 @@ def register():
     )
 
     send_verification_email(email, verification_code)
-    return jsonify({"msg": "Verification code sent to your email"}), 200
+    return jsonify({"message": "Verification code sent to your email"}), 200
 
 
 @app.route("/verify", methods=["POST"])
@@ -206,16 +221,19 @@ def verify_code():
     email = data.get("email")
     code = data.get("code")
 
+    if not email or not code:
+        return jsonify({"error": "Email and code required"}), 400
+
     record = pending_verifications.find_one({"email": email})
-
-    if not record:
-        return jsonify({"msg": "No pending verification found for this email"}), 404
-
-    if record["verification_code"] != code:
-        return jsonify({"msg": "Incorrect verification code"}), 400
+    now = datetime.utcnow()
+    if not record or record["verification_code"] != code:
+        return jsonify({"error": "Invalid or expired code"}), 400
+    
+    if "expires_at" in record and record["expires_at"] < now:
+        return jsonify({"error": "Verification code has expired"}), 400    
 
     users.insert_one({
-        "full_name": record.get("full_name", ""),  # ✅ Save full name to users
+        "full_name": record.get("full_name", ""),
         "email": email,
         "password": record["password"],
         "dob": record["dob"]
@@ -223,7 +241,34 @@ def verify_code():
 
     pending_verifications.delete_one({"email": email})
 
-    return jsonify({"msg": "Email verified and user registered!"}), 201
+    return jsonify({"message": "Email verified"}), 200
+
+@app.route("/resend-code", methods=["POST"])
+def resend_code():
+    data = request.json
+    email = data.get("email")
+
+    if not email:
+        return jsonify({"error": "Email required"}), 400
+
+    record = pending_verifications.find_one({"email": email})
+    if not record:
+        return jsonify({"error": "No pending verification found"}), 404
+
+    new_code = ''.join(random.choices(string.digits, k=6))
+    expires_at = datetime.utcnow() + timedelta(minutes=10)
+
+    pending_verifications.update_one(
+        {"email": email},
+        {"$set": {
+            "verification_code": new_code,
+            "created_at": datetime.utcnow(),
+            "expires_at": expires_at
+        }}
+    )
+
+    send_verification_email(email, new_code)
+    return jsonify({"message": "Verification code resent"}), 200
 
 
 
