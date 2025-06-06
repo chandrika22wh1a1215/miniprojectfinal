@@ -39,6 +39,20 @@ ALLOWED_USERS = {
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() == 'pdf'
 
+# ====== Step 1: Password Validator ======
+def validate_password(password):
+    if len(password) < 8:
+        return False, "Password must be at least 8 characters long."
+    if not re.search(r"[A-Z]", password):
+        return False, "Password must contain at least one uppercase letter."
+    if not re.search(r"[a-z]", password):
+        return False, "Password must contain at least one lowercase letter."
+    if not re.search(r"[0-9]", password):
+        return False, "Password must contain at least one digit."
+    if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
+        return False, "Password must contain at least one special character."
+    return True, ""
+
 @app.route('/')
 def home():
     return "Flask app is running!"
@@ -48,8 +62,15 @@ def register():
     data = request.json
     email = data.get("email")
     password = data.get("password")
+
+    # Password validation
+    valid, msg = validate_password(password)
+    if not valid:
+        return jsonify({"msg": msg}), 400
+
     if users.find_one({"email": email}):
         return jsonify({"msg": "User already exists"}), 409
+
     hashed_pw = bcrypt.generate_password_hash(password).decode('utf-8')
     users.insert_one({"email": email, "password": hashed_pw})
     return jsonify({"msg": "User registered successfully"}), 201
