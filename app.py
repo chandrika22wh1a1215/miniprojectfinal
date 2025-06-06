@@ -112,7 +112,8 @@ def verify_registration():
 
     users.insert_one({
         "email": email,
-        "password": record["password"]
+        "password": record["password"],
+        "dob": record["dob"]
     })
     pending_verifications.delete_one({"email": email})
 
