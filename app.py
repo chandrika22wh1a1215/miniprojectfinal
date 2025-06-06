@@ -14,10 +14,11 @@ from flask_jwt_extended import (
 )
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, origins=["https://resumefrontend-rif3.onrender.com"])  # Allow only your frontend origin
+
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024  # 2 MB upload limit
 app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY", "your-secret-key")
-app.config["JWT_ACCESS_TOKEN_EXPIRES"] = False
+app.config["JWT_ACCESS_TOKEN_EXPIRES"] = False  # Permanent tokens (no expiration)
 
 bcrypt = Bcrypt(app)
 jwt = JWTManager(app)
@@ -30,7 +31,7 @@ resumes = db["resumes"]
 users = db["users"]
 
 ALLOWED_USERS = {
-    "22wh1a1215@bvrithyderabad.edu.in", 
+    "22wh1a1215@bvrithyderabad.edu.in",
     "22wh1a1239@bvrithyderabad.edu.in",
     "allisarmishta@gmail.com"
 }
@@ -129,10 +130,8 @@ def update_resume(id):
     resumes.update_one({"_id": ObjectId(id)}, {"$set": updated_data})
     return jsonify({"msg": "Resume updated successfully!"})
 
-import traceback  # make sure at the top
-
 @app.route("/profile", methods=["POST"])
-# @jwt_required()  # Temporarily disabled
+# @jwt_required()  # Disabled for now, enable if needed
 def add_manual_resume():
     try:
         print("📥 Received POST /profile")
@@ -218,7 +217,6 @@ Total Experience: {total_years} years
         return jsonify({"msg": "Profile saved", "id": str(result.inserted_id)}), 201
 
     except Exception as e:
-        import traceback
         traceback.print_exc()
         return jsonify({"msg": f"Internal Server Error: {str(e)}"}), 500
 
