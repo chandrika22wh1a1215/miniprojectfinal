@@ -18,6 +18,8 @@ import datetime
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.message import EmailMessage
+
 
 app = Flask(__name__)
 CORS(app, origins=["https://resumefrontend-rif3.onrender.com"])
@@ -48,26 +50,23 @@ MAX_ATTEMPTS = 3
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() == 'pdf'
 
-def send_verification_email(to_email, code):
-    sender_email = os.getenv("EMAIL_USER")
-    sender_pass = os.getenv("EMAIL_PASS")
-    subject = "Your Verification Code"
-    body = f"Your verification code is: {code}"
-
-    msg = MIMEMultipart()
-    msg["From"] = sender_email
-    msg["To"] = to_email
-    msg["Subject"] = subject
-    msg.attach(MIMEText(body, "plain"))
-
+def send_verification_email(receiver_email, code):
     try:
-        with smtplib.SMTP("smtp.gmail.com", 587) as server:
-            server.starttls()
-            server.login(sender_email, sender_pass)
-            server.sendmail(sender_email, to_email, msg.as_string())
-        print(f"Email sent to {to_email}")
+        msg = EmailMessage()
+        msg['Subject'] = 'Your Verification Code'
+        msg['From'] = '8f06f4002@smtp-brevo.com'  # Your Brevo email
+        msg['To'] = receiver_email
+        msg.set_content(f"Your verification code is: {code}")
+
+        with smtplib.SMTP('smtp-relay.brevo.com', 587) as smtp:
+            smtp.starttls()
+            smtp.login('8f06f4002@smtp-brevo.com', 'g5OsRyTUfJnXtM96')  # Use your credentials
+            smtp.send_message(msg)
+
+        print(f"✅ Verification email sent to {receiver_email}")
     except Exception as e:
-        print(f"Error sending email: {e}")
+        print(f"❌ Failed to send email: {e}")
+
 
 @app.route('/')
 def home():
