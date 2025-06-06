@@ -198,6 +198,33 @@ def register():
     send_verification_email(email, verification_code)
     return jsonify({"msg": "Verification code sent to your email"}), 200
 
+@app.route("/verify", methods=["POST"])
+def verify_code():
+    data = request.json
+    email = data.get("email")
+    code = data.get("code")
+
+    record = pending_verifications.find_one({"email": email})
+
+    if not record:
+        return jsonify({"msg": "No pending verification found for this email"}), 404
+
+    if record["verification_code"] != code:
+        return jsonify({"msg": "Incorrect verification code"}), 400
+
+    # If verified, move to `users` collection
+    users.insert_one({
+        "email": email,
+        "password": record["password"],
+        "dob": record["dob"]
+    })
+
+    # Remove from pending_verifications
+    pending_verifications.delete_one({"email": email})
+
+    return jsonify({"msg": "Email verified and user registered!"}), 201
+
+
 @app.route("/upload_resume", methods=["POST"])
 @jwt_required()
 def upload_resume():
