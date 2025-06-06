@@ -49,23 +49,26 @@ MAX_ATTEMPTS = 3
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() == 'pdf'
-
+    
 def send_verification_email(receiver_email, code):
     try:
+        print(f"⚙️ Preparing to send email to {receiver_email} with code {code}")
+        
         msg = EmailMessage()
         msg['Subject'] = 'Your Verification Code'
-        msg['From'] = '8f06f4002@smtp-brevo.com'  # Your Brevo email
+        msg['From'] = '8f06f4002@smtp-brevo.com'
         msg['To'] = receiver_email
         msg.set_content(f"Your verification code is: {code}")
 
         with smtplib.SMTP('smtp-relay.brevo.com', 587) as smtp:
             smtp.starttls()
-            smtp.login('8f06f4002@smtp-brevo.com', 'g5OsRyTUfJnXtM96')  # Use your credentials
+            smtp.login('8f06f4002@smtp-brevo.com', 'g5OsRyTUfJnXtM96')
             smtp.send_message(msg)
 
         print(f"✅ Verification email sent to {receiver_email}")
     except Exception as e:
         print(f"❌ Failed to send email: {e}")
+
 
 
 @app.route('/')
