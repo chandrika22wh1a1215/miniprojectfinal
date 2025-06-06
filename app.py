@@ -1,4 +1,3 @@
-from flask import Flask, request, jsonify
 from pymongo import MongoClient
 from bson.objectid import ObjectId
 import os
@@ -50,6 +49,25 @@ MAX_ATTEMPTS = 3
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() == 'pdf'
 
+def send_verification_email(receiver_email, code):
+    try:
+        msg = EmailMessage()
+        msg['Subject'] = 'Your Verification Code'
+        msg['From'] = '22wh1a1215@bvrithyderabad.edu.in'  # Replace with your Gmail
+        msg['To'] = receiver_email
+        msg.set_content(f"Your verification code is: {code}")
+
+        # Gmail SMTP server
+        with smtplib.SMTP('smtp.gmail.com', 587) as smtp:
+            smtp.starttls()
+            smtp.login('22wh1a1215@bvrithyderabad.edu.in', 'lhvcjbdvwqtxwazo')  # Your Gmail + App password (no spaces)
+            smtp.send_message(msg)
+
+        print(f"✅ Verification email sent to {receiver_email}")
+    except Exception as e:
+        print(f"❌ Failed to send email: {e}")
+
+
 
 @app.route('/')
 def home():
@@ -73,6 +91,25 @@ def send_verification_email(receiver_email, code):
         print(f"✅ Verification email sent to {receiver_email}")
     except Exception as e:
         print(f"❌ Failed to send email: {e}")
+
+
+def send_verification_email(receiver_email, code):
+    try:
+        msg = EmailMessage()
+        msg['Subject'] = 'Your Verification Code'
+        msg['From'] = '22wh1a1215@bvrithyderabad.edu.in'  # Your Gmail address
+        msg['To'] = receiver_email
+        msg.set_content(f"Your verification code is: {code}")
+
+        with smtplib.SMTP('smtp.gmail.com', 587) as smtp:
+            smtp.starttls()
+            smtp.login('22wh1a1215@bvrithyderabad.edu.in', 'lhvcjbdvwqtxwazo')  # Your Gmail + App password
+            smtp.send_message(msg)
+
+        print(f"✅ Verification email sent to {receiver_email}")
+    except Exception as e:
+        print(f"❌ Failed to send email: {e}")
+
 
 @app.route("/login", methods=["POST"])
 def login():
@@ -291,4 +328,3 @@ Total Experience: {total_years} years
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=5000)
-
