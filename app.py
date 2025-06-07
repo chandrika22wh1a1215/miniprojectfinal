@@ -54,26 +54,19 @@ def send_verification_email(receiver_email, code):
     try:
         msg = EmailMessage()
         msg['Subject'] = 'Your Verification Code'
-        msg['From'] = '22wh1a1215@bvrithyderabad.edu.in'  # Replace with your Gmail
+        msg['From'] = '22wh1a1215@bvrithyderabad.edu.in'
         msg['To'] = receiver_email
         msg.set_content(f"Your verification code is: {code}")
 
-        # Gmail SMTP server
         with smtplib.SMTP('smtp.gmail.com', 587) as smtp:
             smtp.starttls()
-            smtp.login('22wh1a1215@bvrithyderabad.edu.in', 'lhvcjbdvwqtxwazo')  # Your Gmail + App password (no spaces)
+            smtp.login('22wh1a1215@bvrithyderabad.edu.in', 'lhvcjbdvwqtxwazo')  # App password
             smtp.send_message(msg)
 
         print(f"✅ Verification email sent to {receiver_email}")
     except Exception as e:
         print(f"❌ Failed to send email: {e}")
-        try:
-            send_verification_email(email, verification_code)
-        except Exception as e:
-            print("❌ Email sending failed:", str(e))
-        return jsonify({"error": "Failed to send verification email"}), 500
-
-
+        raise  # Raise it to the route so it can handle it
 
 @app.route('/')
 def home():
@@ -139,7 +132,6 @@ def register():
     if not full_name or not email or not password or not dob_str:
         return jsonify({"error": "Full name, email, password and DOB required"}), 400
 
-    # ✅ Password strength validation
     password_regex = r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*])[A-Za-z\d!@#$%^&*]{8,}$'
     if not re.match(password_regex, password):
         return jsonify({
@@ -147,24 +139,20 @@ def register():
         }), 400
 
     confirm_password = data.get("confirm_password")
-
     if password != confirm_password:
         return jsonify({"error": "Passwords do not match"}), 400
-
 
     try:
         dob = datetime.strptime(dob_str, "%d-%m-%Y")
     except ValueError:
         return jsonify({"error": "DOB must be in dd-mm-yyyy format"}), 400
 
-    existing_user = users.find_one({"email": email})
-    if existing_user:
+    if users.find_one({"email": email}):
         return jsonify({"error": "User already registered"}), 409
 
     hashed_password = bcrypt.generate_password_hash(password).decode("utf-8")
     verification_code = ''.join(random.choices(string.digits, k=6))
 
-    expires_at = datetime.utcnow() + timedelta(minutes=10)
     pending_verifications.update_one(
         {"email": email},
         {
@@ -179,8 +167,14 @@ def register():
         upsert=True
     )
 
-    send_verification_email(email, verification_code)
+    try:
+        send_verification_email(email, verification_code)
+    except Exception:
+        return jsonify({"error": "Failed to send verification email"}), 500
+
     return jsonify({"message": "Verification code sent to your email"}), 200
+
+
 
 
 @app.route("/verify", methods=["POST"])
