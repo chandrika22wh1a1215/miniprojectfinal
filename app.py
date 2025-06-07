@@ -181,42 +181,53 @@ def register():
     send_verification_email(email, verification_code)
     return jsonify({"message": "Verification code sent to your email"}), 200
 
+
 @app.route("/verify", methods=["POST"])
 def verify_code():
-    data = request.json
-    email = data.get("email")
-    code = data.get("code")
+    try:
+        data = request.json
+        print("DEBUG: Incoming data:", data)
 
-    if not email or not code:
-        return jsonify({"message": "Missing email or code"}), 400
+        email = data.get("email")
+        code = data.get("code")
 
-    record = pending_verifications.find_one({"email": email})
-    if not record or str(record.get("verification_code")) != str(code):
-        return jsonify({"message": "Invalid verification code"}), 400
+        if not email or not code:
+            return jsonify({"message": "Missing email or code"}), 400
 
-    now = datetime.utcnow()
-    if record.get("expires_at") and now > record["expires_at"]:
-        return jsonify({"message": "Verification code expired"}), 400
+        record = pending_verifications.find_one({"email": email})
+        print("DEBUG: Retrieved record:", record)
 
-    # ✅ Safe field extraction with default fallback
-    full_name = record.get("full_name")
-    password = record.get("password")
-    dob = record.get("dob")
+        if not record or str(record.get("verification_code")) != str(code):
+            return jsonify({"message": "Invalid verification code"}), 400
 
-    if not all([full_name, password, dob]):
-        return jsonify({"message": "Incomplete registration info. Please register again."}), 500
+        now = datetime.utcnow()
+        if record.get("expires_at") and now > record["expires_at"]:
+            return jsonify({"message": "Verification code expired"}), 400
 
-    if not users.find_one({"email": email}):
-        users.insert_one({
-            "full_name": full_name,
-            "email": email,
-            "password": password,
-            "dob": dob,
-            "created_at": record["created_at"]
-        })
+        full_name = record.get("full_name")
+        password = record.get("password")
+        dob = record.get("dob")
 
-    pending_verifications.delete_one({"email": email})
-    return jsonify({"message": "Email verified successfully"}), 200
+        if not all([full_name, password, dob]):
+            return jsonify({"message": "Incomplete registration info. Please register again."}), 500
+
+        if not users.find_one({"email": email}):
+            users.insert_one({
+                "full_name": full_name,
+                "email": email,
+                "password": password,
+                "dob": dob,
+                "created_at": record.get("created_at", datetime.utcnow())
+            })
+
+        pending_verifications.delete_one({"email": email})
+        return jsonify({"message": "Email verified successfully"}), 200
+
+    except Exception as e:
+        print("ERROR:", str(e))
+        traceback.print_exc()
+        return jsonify({"message": "Server error"}), 500
+
 
 
 @app.route("/resend-code", methods=["POST"])
