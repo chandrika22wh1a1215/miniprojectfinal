@@ -67,6 +67,11 @@ def send_verification_email(receiver_email, code):
         print(f"✅ Verification email sent to {receiver_email}")
     except Exception as e:
         print(f"❌ Failed to send email: {e}")
+        try:
+            send_verification_email(email, verification_code)
+        except Exception as e:
+            print("❌ Email sending failed:", str(e))
+        return jsonify({"error": "Failed to send verification email"}), 500
 
 
 
