@@ -21,7 +21,7 @@ from email.mime.multipart import MIMEMultipart
 from email.message import EmailMessage
 from datetime import datetime
 
-app = Flask(_name_)
+app = Flask(__name__)
 CORS(app, origins=["https://resumefrontend-rif3.onrender.com"])
 
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024
@@ -453,5 +453,5 @@ Total Experience: {total_years} years
         return jsonify({"msg": f"Internal Server Error: {str(e)}"}), 500
 
 
-if _name_ == "_main_":
+if _name_ == "__main__":
     app.run(debug=True, host="0.0.0.0", port=5000)
