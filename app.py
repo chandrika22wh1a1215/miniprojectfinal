@@ -20,7 +20,7 @@ import string
 import smtplib
 
 
-app = Flask(__name__)
+app = Flask(_name_)
 CORS(app, origins=[
     "https://resumefrontend-rif3.onrender.com",
     "https://mini-project-eight-amber.vercel.app"
@@ -29,7 +29,6 @@ CORS(app, origins=[
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024
 app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY", "your-secret-key")
 app.config["JWT_ACCESS_TOKEN_EXPIRES"] = False
-app.secret_key = os.getenv("SESSION_SECRET_KEY", "your-session-secret")
 
 bcrypt = Bcrypt(app)
 jwt = JWTManager(app)
@@ -150,7 +149,7 @@ def register():
     if not full_name or not email or not password or not dob_str:
         return jsonify({"error": "Full name, email, password and DOB required"}), 400
 
-    password_regex = r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&])[A-Za-z\d!@#$%^&]{8,}$'
+    password_regex = r'^(?=.[a-z])(?=.[A-Z])(?=.\d)(?=.[!@#$%^&])[A-Za-z\d!@#$%^&]{8,}$'
     if not re.match(password_regex, password):
         return jsonify({"error": "Password too weak"}), 400
     if password != confirm_password:
@@ -182,7 +181,6 @@ def register():
     send_verification_email(email, verification_code)
     return jsonify({"message": "Verification code sent to your email"}), 200
 
-
 @app.route("/verify", methods=["POST"])
 def verify_code():
     data = request.json
@@ -203,7 +201,8 @@ def verify_code():
 
     if "expires_at" in record and record["expires_at"] < now:
         return jsonify({"error": "Code expired"}), 400
-        if "password" not in record or "dob" not in record:
+
+    if "password" not in record or "dob" not in record:
         return jsonify({"error": "Missing required user data"}), 400
 
     users.insert_one({
@@ -283,7 +282,7 @@ def reset_password():
     if new_password != confirm_password:
         return jsonify({"error": "Passwords do not match"}), 400
 
-    password_regex = r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&])[A-Za-z\d!@#$%^&]{8,}$'
+    password_regex = r'^(?=.[a-z])(?=.[A-Z])(?=.\d)(?=.[!@#$%^&])[A-Za-z\d!@#$%^&]{8,}$'
     if not re.match(password_regex, new_password):
         return jsonify({"error": "Password too weak"}), 400
 
@@ -421,5 +420,5 @@ Total Experience: {total_years} years
         traceback.print_exc()
         return jsonify({"msg": f"Internal Server Error: {str(e)}"}), 500
 
-if __name__ == "__main__":
+if _name_ == "_main_":
     app.run(debug=True, host="0.0.0.0")
