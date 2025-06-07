@@ -50,6 +50,21 @@ MAX_ATTEMPTS = 3
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() == 'pdf'
 
+@app.route('/api/send-verification-code', methods=['POST'])
+def send_verification_code_route():
+    data = request.json
+    email = data.get('email')
+    code = data.get('code')  # or generate code here if needed
+    
+    if not email or not code:
+        return jsonify({'error': 'Email and code required'}), 400
+    
+    try:
+        send_verification_email(email, code)
+        return jsonify({'message': 'Verification email sent'}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 def send_verification_email(receiver_email, code):
     try:
         msg = EmailMessage()
