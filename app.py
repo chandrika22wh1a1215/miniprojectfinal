@@ -187,22 +187,31 @@ def verify_code():
     email = data.get("email")
     code = data.get("code")
 
-    print("DEBUG: Received data =>", data)
-    print("DEBUG: Email =>", email)
-    print("DEBUG: Code =>", code)
-
     if not email or not code:
         return jsonify({"message": "Missing email or code"}), 400
 
     now = datetime.utcnow()
     record = pending_verifications.find_one({"email": email})
-    
-    print("DEBUG: Fetched record =>", record)
+
     if not record or str(record.get("verification_code")) != str(code):
         return jsonify({"message": "Invalid verification code"}), 400
 
     if record.get("expires_at") and now > record["expires_at"]:
         return jsonify({"message": "Verification code expired"}), 400
+
+    # ✅ Move to 'users' collection
+    user_exists = users.find_one({"email": email})
+    if not user_exists:
+        users.insert_one({
+            "full_name": record["full_name"],
+            "email": email,
+            "password": record["password"],
+            "dob": record["dob"],
+            "created_at": record["created_at"]
+        })
+
+    # ✅ Clean up verification record
+    pending_verifications.delete_one({"email": email})
 
     return jsonify({"message": "Email verified successfully"}), 200
 
