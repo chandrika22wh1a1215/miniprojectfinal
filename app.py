@@ -15,11 +15,9 @@ from flask_jwt_extended import (
 import random
 import string
 import datetime
+from datetime import timedelta, datetime
 import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 from email.message import EmailMessage
-from datetime import datetime
 
 app = Flask(__name__)
 CORS(app, origins=["https://resumefrontend-rif3.onrender.com"])
@@ -31,7 +29,7 @@ app.config["JWT_ACCESS_TOKEN_EXPIRES"] = False
 bcrypt = Bcrypt(app)
 jwt = JWTManager(app)
 
-mongo_uri = "mongodb+srv://22wh1a1215:Resume@cluster0.fu4wtmw.mongodb.net/job_scraping_db?retryWrites=true&w=majority"
+mongo_uri = os.getenv("MONGO_URI")
 client = MongoClient(mongo_uri)
 db = client["job_scraping_db"]
 resumes = db["resumes"]
@@ -59,7 +57,7 @@ def send_verification_code_route():
         return jsonify({'error': 'Email required'}), 400
 
     code = ''.join(random.choices(string.digits, k=6))
-    expires_at = datetime.utcnow() + datetime.timedelta(minutes=3)
+    expires_at = datetime.utcnow() + timedelta(minutes=3)
 
     pending_verifications.update_one(
         {"email": email},
@@ -79,29 +77,24 @@ def send_verification_code_route():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-
 def send_verification_email(receiver_email, code):
     try:
         msg = EmailMessage()
         msg['Subject'] = 'Your Verification Code'
-        msg['From'] = '22wh1a1215@bvrithyderabad.edu.in'
+        msg['From'] = os.getenv("EMAIL_USER")
         msg['To'] = receiver_email
         msg.set_content(f"Your verification code is: {code}")
 
         with smtplib.SMTP('smtp.gmail.com', 587) as smtp:
             smtp.starttls()
-            smtp.login('22wh1a1215@bvrithyderabad.edu.in', 'lhvcjbdvwqtxwazo')  # App password
+            smtp.login(os.getenv("EMAIL_USER"), os.getenv("EMAIL_PASS"))
             smtp.send_message(msg)
-
-        print(f"✅ Verification email sent to {receiver_email}")
     except Exception as e:
-        print(f"❌ Failed to send email: {e}")
-        raise  # Raise it to the route so it can handle it
+        raise
 
 @app.route('/')
 def home():
     return "Flask app is running!"
-
 
 @app.route("/login", methods=["POST"])
 def login():
@@ -149,8 +142,6 @@ def extract_text_pymupdf(pdf_path):
         text += page.get_text()
     return text
 
-import re  # Add this at the top if not already
-
 @app.route("/register", methods=["POST"])
 def register():
     data = request.json
@@ -165,7 +156,7 @@ def register():
     password_regex = r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*])[A-Za-z\d!@#$%^&*]{8,}$'
     if not re.match(password_regex, password):
         return jsonify({
-            "error": "Password must be at least 8 characters long and include at least one uppercase letter, one lowercase letter, one digit, and one special character (!@#$%^&*)."
+            "error": "Password must meet strength requirements."
         }), 400
 
     confirm_password = data.get("confirm_password")
@@ -191,7 +182,8 @@ def register():
                 "password": hashed_password,
                 "dob": dob_str,
                 "verification_code": verification_code,
-                "created_at": datetime.utcnow()
+                "created_at": datetime.utcnow(),
+                "expires_at": datetime.utcnow() + timedelta(minutes=3)
             }
         },
         upsert=True
@@ -203,9 +195,6 @@ def register():
         return jsonify({"error": "Failed to send verification email"}), 500
 
     return jsonify({"message": "Verification code sent to your email"}), 200
-
-
-
 
 @app.route("/verify", methods=["POST"])
 def verify_code():
@@ -220,9 +209,9 @@ def verify_code():
     now = datetime.utcnow()
     if not record or record["verification_code"] != code:
         return jsonify({"error": "Invalid or expired code"}), 400
-    
+
     if "expires_at" in record and record["expires_at"] < now:
-        return jsonify({"error": "Verification code has expired"}), 400    
+        return jsonify({"error": "Verification code has expired"}), 400
 
     users.insert_one({
         "full_name": record.get("full_name", ""),
