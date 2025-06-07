@@ -29,6 +29,7 @@ CORS(app, origins=[
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024
 app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY", "your-secret-key")
 app.config["JWT_ACCESS_TOKEN_EXPIRES"] = False
+app.secret_key = os.getenv("SESSION_SECRET_KEY", "your-session-secret")
 
 bcrypt = Bcrypt(app)
 jwt = JWTManager(app)
@@ -179,6 +180,7 @@ def register():
     )
 
     send_verification_email(email, verification_code)
+    session["email_to_verify"] = email
     return jsonify({"message": "Verification code sent to your email"}), 200
 
 @app.route("/verify", methods=["POST"])
@@ -187,11 +189,11 @@ def verify_code():
     if not data:
         return jsonify({"error": "Invalid JSON"}), 400
 
-    email = data.get("email")
     code = data.get("code")
+    email = session.get("email_to_verify")
 
     if not email or not code:
-        return jsonify({"error": "Email and code required"}), 400
+        return jsonify({"error": "Missing email or code"}), 400
 
     record = pending_verifications.find_one({"email": email})
     now = datetime.utcnow()
@@ -213,6 +215,8 @@ def verify_code():
     })
 
     pending_verifications.delete_one({"email": email})
+    session["email_to_verify"] = email
+
     return jsonify({"message": "Email verified"}), 200
 
 
