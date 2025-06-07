@@ -83,6 +83,9 @@ def send_verification_code_route():
     if not email:
         return jsonify({'error': 'Email required'}), 400
 
+    # Set session variable
+    session['verification_email'] = email
+
     # Generate code
     code = ''.join(random.choices(string.digits, k=6))
     expires_at = datetime.utcnow() + timedelta(minutes=3)
@@ -103,6 +106,7 @@ def send_verification_code_route():
         return jsonify({'message': 'Verification email sent'}), 200
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
 
 @app.route("/login", methods=["POST"])
 def login():
@@ -179,15 +183,6 @@ def register():
 
     send_verification_email(email, verification_code)
     return jsonify({"message": "Verification code sent to your email"}), 200
-
-@app.route("/send-code", methods=["POST"])
-def send_code():
-    email = request.json.get("email")
-    if not email:
-        return jsonify({"error": "Email required"}), 400
-    session['verification_email'] = email
-    # ...your code to generate and send the verification code...
-    return jsonify({"message": "Code sent"})
 
 @app.route("/verify", methods=["POST"])
 def verify_code():
