@@ -333,7 +333,6 @@ def update_resume(id):
     return jsonify({"msg": "Resume updated successfully!"})
 
 @app.route("/profile", methods=["POST"])
-@jwt_required()
 def add_manual_resume():
     try:
         data = request.json
