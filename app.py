@@ -78,9 +78,24 @@ def send_verification_email(receiver_email, code):
 def send_verification_code_route():
     data = request.json
     email = data.get('email')
-    code = data.get('code')
-    if not email or not code:
-        return jsonify({'error': 'Email and code required'}), 400
+    if not email:
+        return jsonify({'error': 'Email required'}), 400
+
+    # Generate code
+    code = ''.join(random.choices(string.digits, k=6))
+    expires_at = datetime.utcnow() + timedelta(minutes=3)
+
+    # Store in database
+    pending_verifications.update_one(
+        {"email": email},
+        {"$set": {
+            "verification_code": code,
+            "created_at": datetime.utcnow(),
+            "expires_at": expires_at
+        }},
+        upsert=True
+    )
+
     try:
         send_verification_email(email, code)
         return jsonify({'message': 'Verification email sent'}), 200
