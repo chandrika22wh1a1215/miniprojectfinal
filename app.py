@@ -333,9 +333,11 @@ def update_resume(id):
     return jsonify({"msg": "Resume updated successfully!"})
 
 @app.route("/profile", methods=["POST"])
+@jwt_required()
 def add_manual_resume():
     try:
         data = request.json
+
         name = data.get("fullName", "").strip()
         email = data.get("email", "").strip()
         phone = data.get("phoneNumber", "").strip()
@@ -347,27 +349,73 @@ def add_manual_resume():
         if not phone or not phone.isdigit():
             return jsonify({"msg": "Phone must be digits only"}), 400
 
+        soft_skills = data.get("SoftSkills", [])
+        technical_skills = data.get("TechnicalSkills", [])
+        skills = {
+            "SoftSkills": soft_skills,
+            "TechnicalSkills": technical_skills
+        }
+
+        education = data.get("Education", [])
+        experience = data.get("Experience", [])
+        certifications = data.get("Certifications", [])
+        projects = data.get("Projects", [])
+        links = data.get("Links", [])
+        summary = data.get("Summary", "")
+        total_years = data.get("TotalYearsOverall", "")
+
+        resume_text = f"""
+Name: {name}
+Email: {email}
+Phone: {phone}
+
+Technical Skills: {', '.join(technical_skills)}
+Soft Skills: {', '.join(soft_skills)}
+
+Education:
+""" + "\n".join([
+            f"- {e.get('Degree', '')} at {e.get('Institution', '')} ({e.get('Year', '')})"
+            for e in education]) + """
+
+Projects:
+""" + "\n".join([
+            f"- {p.get('Name', '')}: {p.get('Description', '')} using {p.get('Technologies', '')}"
+            for p in projects]) + """
+
+Experience:
+""" + "\n".join([
+            f"- {x.get('Title', '')} at {x.get('Company', '')} ({x.get('Duration', '')})"
+            for x in experience]) + """
+
+Certifications:
+""" + "\n".join([
+            f"- {c.get('Name', '')} from {c.get('Issuer', '')} ({c.get('Year', '')})"
+            for c in certifications]) + f"""
+
+Links: {', '.join(links)}
+Summary: {summary}
+Total Experience: {total_years} years
+""".strip()
+
         resume = {
             "Name": name,
             "Email": email,
             "Phone": phone,
-            "Skills": {
-                "SoftSkills": data.get("SoftSkills", []),
-                "TechnicalSkills": data.get("TechnicalSkills", [])
-            },
-            "Education": data.get("Education", []),
-            "Experience": data.get("Experience", []),
-            "Certifications": data.get("Certifications", []),
-            "Projects": data.get("Projects", []),
-            "Links": data.get("Links", []),
-            "Summary": data.get("Summary", ""),
-            "TotalYearsOverall": data.get("TotalYearsOverall", ""),
-            "ResumeText": "",
+            "Skills": skills,
+            "Education": education,
+            "Experience": experience,
+            "Certifications": certifications,
+            "Projects": projects,
+            "Links": links,
+            "Summary": summary,
+            "TotalYearsOverall": total_years,
+            "ResumeText": resume_text,
             "SubmittedBy": get_jwt_identity()
         }
 
         result = resumes.insert_one(resume)
         return jsonify({"msg": "Profile saved", "id": str(result.inserted_id)}), 201
+
     except Exception as e:
         traceback.print_exc()
         return jsonify({"msg": f"Internal Server Error: {str(e)}"}), 500
