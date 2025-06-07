@@ -184,36 +184,27 @@ def register():
 @app.route("/verify", methods=["POST"])
 def verify_code():
     data = request.json
-    if not data:
-        return jsonify({"error": "Invalid JSON"}), 400
-
     email = data.get("email")
     code = data.get("code")
 
+    print("DEBUG: Received data =>", data)
+    print("DEBUG: Email =>", email)
+    print("DEBUG: Code =>", code)
+
     if not email or not code:
-        return jsonify({"error": "Email and code required"}), 400
+        return jsonify({"message": "Missing email or code"}), 400
 
-    record = pending_verifications.find_one({"email": email})
     now = datetime.utcnow()
+    record = pending_verifications.find_one({"email": email})
+    
+    print("DEBUG: Fetched record =>", record)
+    if not record or str(record.get("verification_code")) != str(code):
+        return jsonify({"message": "Invalid verification code"}), 400
 
-    if not record or record["verification_code"] != code:
-        return jsonify({"error": "Invalid or expired code"}), 400
+    if record.get("expires_at") and now > record["expires_at"]:
+        return jsonify({"message": "Verification code expired"}), 400
 
-    if "expires_at" in record and record["expires_at"] < now:
-        return jsonify({"error": "Code expired"}), 400
-
-    if "password" not in record or "dob" not in record:
-        return jsonify({"error": "Missing required user data"}), 400
-
-    users.insert_one({
-        "full_name": record.get("full_name", ""),
-        "email": email,
-        "password": record["password"],
-        "dob": record["dob"]
-    })
-
-    pending_verifications.delete_one({"email": email})
-    return jsonify({"message": "Email verified"}), 200
+    return jsonify({"message": "Email verified successfully"}), 200
 
 
 
