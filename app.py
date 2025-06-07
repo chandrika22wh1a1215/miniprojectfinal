@@ -218,7 +218,7 @@ def resend_code():
         return jsonify({"error": "No pending verification found"}), 404
 
     new_code = ''.join(random.choices(string.digits, k=6))
-    expires_at = datetime.utcnow() + timedelta(minutes=10)
+    expires_at = datetime.utcnow() + timedelta(minutes=3)
 
     pending_verifications.update_one(
         {"email": email},
@@ -232,6 +232,66 @@ def resend_code():
     send_verification_email(email, new_code)
     return jsonify({"message": "Verification code resent"}), 200
 
+@app.route("/forgot-password", methods=["POST"])
+def forgot_password():
+    data = request.json
+    email = data.get("email")
+
+    if not email:
+        return jsonify({"error": "Email required"}), 400
+
+    user = users.find_one({"email": email})
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    reset_code = ''.join(random.choices(string.digits, k=6))
+    expires_at = datetime.utcnow() + timedelta(minutes=3)
+
+    pending_verifications.update_one(
+        {"email": email},
+        {"$set": {
+            "reset_code": reset_code,
+            "created_at": datetime.utcnow(),
+            "expires_at": expires_at
+        }},
+        upsert=True
+    )
+
+    send_verification_email(email, reset_code)
+    return jsonify({"message": "Password reset code sent to your email"}), 200
+
+
+@app.route("/reset-password", methods=["POST"])
+def reset_password():
+    data = request.json
+    email = data.get("email")
+    code = data.get("code")
+    new_password = data.get("new_password")
+    confirm_password = data.get("confirm_password")
+
+    if not email or not code or not new_password or not confirm_password:
+        return jsonify({"error": "All fields are required"}), 400
+
+    if new_password != confirm_password:
+        return jsonify({"error": "Passwords do not match"}), 400
+
+    # ✅ Password strength validation
+    password_regex = r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*])[A-Za-z\d!@#$%^&*]{8,}$'
+    if not re.match(password_regex, new_password):
+        return jsonify({
+            "error": "Password must be at least 8 characters long and include at least one uppercase letter, one lowercase letter, one digit, and one special character (!@#$%^&*)."
+        }), 400
+
+    record = pending_verifications.find_one({"email": email})
+    now = datetime.utcnow()
+    if not record or record.get("reset_code") != code or record.get("expires_at", now) < now:
+        return jsonify({"error": "Invalid or expired reset code"}), 400
+
+    hashed_password = bcrypt.generate_password_hash(new_password).decode("utf-8")
+    users.update_one({"email": email}, {"$set": {"password": hashed_password}})
+    pending_verifications.delete_one({"email": email})
+
+    return jsonify({"message": "Password reset successful"}), 200
 
 
 @app.route("/upload_resume", methods=["POST"])
