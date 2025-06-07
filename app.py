@@ -4,19 +4,20 @@ from bson.objectid import ObjectId
 import os
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
-import fitz  # PyMuPDF
-import tempfile
-import traceback
-import re
+from email.message import EmailMessage
+from datetime import datetime, timedelta
 from flask_bcrypt import Bcrypt
 from flask_jwt_extended import (
     JWTManager, create_access_token, jwt_required, get_jwt_identity
 )
+import fitz  # PyMuPDF
+import tempfile
+import traceback
+import re
 import random
 import string
 import smtplib
-from email.message import EmailMessage
-from datetime import datetime, timedelta
+
 
 app = Flask(__name__)
 CORS(app, origins=[
@@ -180,30 +181,46 @@ def register():
 
 @app.route("/verify", methods=["POST"])
 def verify_code():
-    data = request.json
-    email = data.get("email")
-    code = data.get("code")
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Invalid JSON"}), 400
 
-    if not email or not code:
-        return jsonify({"error": "Email and code required"}), 400
+        email = data.get("email")
+        code = data.get("code")
 
-    record = pending_verifications.find_one({"email": email})
-    now = datetime.utcnow()
-    if not record or record["verification_code"] != code:
-        return jsonify({"error": "Invalid or expired code"}), 400
+        if not email or not code:
+            return jsonify({"error": "Email and code required"}), 400
 
-    if "expires_at" in record and record["expires_at"] < now:
-        return jsonify({"error": "Code expired"}), 400
+        record = pending_verifications.find_one({"email": email})
+        now = datetime.utcnow()
 
-    users.insert_one({
-        "full_name": record.get("full_name", ""),
-        "email": email,
-        "password": record["password"],
-        "dob": record["dob"]
-    })
+        if not record:
+            return jsonify({"error": "Invalid or expired code"}), 400
 
-    pending_verifications.delete_one({"email": email})
-    return jsonify({"message": "Email verified"}), 200
+        if record.get("verification_code") != code:
+            return jsonify({"error": "Invalid or expired code"}), 400
+
+        if "expires_at" in record and record["expires_at"] < now:
+            return jsonify({"error": "Code expired"}), 400
+
+        # Ensure required fields are present
+        if "password" not in record or "dob" not in record:
+            return jsonify({"error": "Missing required user data"}), 400
+
+        users.insert_one({
+            "full_name": record.get("full_name", ""),
+            "email": email,
+            "password": record["password"],
+            "dob": record["dob"]
+        })
+
+        pending_verifications.delete_one({"email": email})
+        return jsonify({"message": "Email verified"}), 200
+
+    except Exception as e:
+        print(f"Error in /verify: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500
 
 @app.route("/resend-code", methods=["POST"])
 def resend_code():
