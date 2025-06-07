@@ -183,55 +183,38 @@ def register():
 
 @app.route("/verify", methods=["POST"])
 def verify_code():
-    try:
-        data = request.get_json()
-        if not data:
-            print("No data in request")
-            return jsonify({"error": "Invalid JSON"}), 400
+    data = request.json
+    if not data:
+        return jsonify({"error": "Invalid JSON"}), 400
 
-        code = data.get("code")
-        if not code:
-            print("No code in request")
-            return jsonify({"error": "Code required"}), 400
+    email = data.get("email")
+    code = data.get("code")
 
-        email = session.get('verification_email')
-        if not email:
-            print("No email in session")
-            return jsonify({"error": "Session expired or invalid"}), 400
+    if not email or not code:
+        return jsonify({"error": "Email and code required"}), 400
 
-        record = pending_verifications.find_one({"email": email})
-        if not record:
-            print("No record found for email:", email)
-            return jsonify({"error": "Invalid or expired code"}), 400
+    record = pending_verifications.find_one({"email": email})
+    now = datetime.utcnow()
 
-        now = datetime.utcnow()
-        if record.get("verification_code") != code:
-            print("Code mismatch")
-            return jsonify({"error": "Invalid or expired code"}), 400
+    if not record or record["verification_code"] != code:
+        return jsonify({"error": "Invalid or expired code"}), 400
 
-        if "expires_at" in record and record["expires_at"] < now:
-            print("Code expired")
-            return jsonify({"error": "Code expired"}), 400
+    if "expires_at" in record and record["expires_at"] < now:
+        return jsonify({"error": "Code expired"}), 400
 
-        if "password" not in record or "dob" not in record:
-            print("Missing required user data in record")
-            return jsonify({"error": "Missing required user data"}), 400
+    if "password" not in record or "dob" not in record:
+        return jsonify({"error": "Missing required user data"}), 400
 
-        users.insert_one({
-            "full_name": record.get("full_name", ""),
-            "email": email,
-            "password": record["password"],
-            "dob": record["dob"]
-        })
+    users.insert_one({
+        "full_name": record.get("full_name", ""),
+        "email": email,
+        "password": record["password"],
+        "dob": record["dob"]
+    })
 
-        pending_verifications.delete_one({"email": email})
-        return jsonify({"message": "Email verified"}), 200
+    pending_verifications.delete_one({"email": email})
+    return jsonify({"message": "Email verified"}), 200
 
-    except Exception as e:
-        print(f"Error in /verify: {str(e)}")
-        import traceback
-        traceback.print_exc()  # Print full stack trace
-        return jsonify({"error": "Internal server error"}), 500
 
 
 @app.route("/resend-code", methods=["POST"])
