@@ -6,6 +6,7 @@ from flask_cors import CORS
 from werkzeug.utils import secure_filename
 from email.message import EmailMessage
 from datetime import datetime, timedelta
+from flask import session
 from flask_bcrypt import Bcrypt
 from flask_jwt_extended import (
     JWTManager, create_access_token, jwt_required, get_jwt_identity
@@ -179,6 +180,7 @@ def register():
     send_verification_email(email, verification_code)
     return jsonify({"message": "Verification code sent to your email"}), 200
 
+
 @app.route("/verify", methods=["POST"])
 def verify_code():
     try:
@@ -186,11 +188,14 @@ def verify_code():
         if not data:
             return jsonify({"error": "Invalid JSON"}), 400
 
-        email = data.get("email")
         code = data.get("code")
+        if not code:
+            return jsonify({"error": "Code required"}), 400
 
-        if not email or not code:
-            return jsonify({"error": "Email and code required"}), 400
+        # Get email from session or token
+        email = session.get('verification_email')
+        if not email:
+            return jsonify({"error": "Session expired or invalid"}), 400
 
         record = pending_verifications.find_one({"email": email})
         now = datetime.utcnow()
@@ -204,7 +209,6 @@ def verify_code():
         if "expires_at" in record and record["expires_at"] < now:
             return jsonify({"error": "Code expired"}), 400
 
-        # Ensure required fields are present
         if "password" not in record or "dob" not in record:
             return jsonify({"error": "Missing required user data"}), 400
 
