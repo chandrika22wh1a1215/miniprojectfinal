@@ -199,21 +199,28 @@ def verify_code():
     if record.get("expires_at") and now > record["expires_at"]:
         return jsonify({"message": "Verification code expired"}), 400
 
-    # ✅ Move to 'users' collection
-    user_exists = users.find_one({"email": email})
-    if not user_exists:
+    # ✅ Safeguard field access
+    try:
+        full_name = record["full_name"]
+        password = record["password"]
+        dob = record["dob"]
+    except KeyError:
+        return jsonify({"message": "Incomplete registration info"}), 500
+
+    # ✅ Move to users
+    if not users.find_one({"email": email}):
         users.insert_one({
-            "full_name": record["full_name"],
+            "full_name": full_name,
             "email": email,
-            "password": record["password"],
-            "dob": record["dob"],
+            "password": password,
+            "dob": dob,
             "created_at": record["created_at"]
         })
 
-    # ✅ Clean up verification record
+    # ✅ Clean up
     pending_verifications.delete_one({"email": email})
-
     return jsonify({"message": "Email verified successfully"}), 200
+
 
 
 
