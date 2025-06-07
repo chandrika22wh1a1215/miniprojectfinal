@@ -19,7 +19,10 @@ from email.message import EmailMessage
 from datetime import datetime, timedelta
 
 app = Flask(__name__)
-CORS(app, origins=["https://resumefrontend-rif3.onrender.com"])
+CORS(app, origins=[
+    "https://resumefrontend-rif3.onrender.com",
+    "https://mini-project-eight-amber.vercel.app"
+])
 
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024
 app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY", "your-secret-key")
