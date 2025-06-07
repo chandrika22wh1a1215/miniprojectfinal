@@ -180,8 +180,8 @@ def register():
     )
 
     send_verification_email(email, verification_code)
-    session["email_to_verify"] = email
     return jsonify({"message": "Verification code sent to your email"}), 200
+
 
 @app.route("/verify", methods=["POST"])
 def verify_code():
@@ -189,11 +189,11 @@ def verify_code():
     if not data:
         return jsonify({"error": "Invalid JSON"}), 400
 
+    email = data.get("email")
     code = data.get("code")
-    email = session.get("email_to_verify")
 
     if not email or not code:
-        return jsonify({"error": "Missing email or code"}), 400
+        return jsonify({"error": "Email and code required"}), 400
 
     record = pending_verifications.find_one({"email": email})
     now = datetime.utcnow()
@@ -203,8 +203,7 @@ def verify_code():
 
     if "expires_at" in record and record["expires_at"] < now:
         return jsonify({"error": "Code expired"}), 400
-
-    if "password" not in record or "dob" not in record:
+        if "password" not in record or "dob" not in record:
         return jsonify({"error": "Missing required user data"}), 400
 
     users.insert_one({
@@ -215,8 +214,6 @@ def verify_code():
     })
 
     pending_verifications.delete_one({"email": email})
-    session["email_to_verify"] = email
-
     return jsonify({"message": "Email verified"}), 200
 
 
