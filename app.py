@@ -74,43 +74,6 @@ def send_verification_email(receiver_email, code):
 def home():
     return "Flask app is running!"
 
-def send_verification_email(receiver_email, code):
-    try:
-        print(f"⚙️ Preparing to send email to {receiver_email} with code {code}")
-        
-        msg = EmailMessage()
-        msg['Subject'] = 'Your Verification Code'
-        msg['From'] = '8f06f4002@smtp-brevo.com'
-        msg['To'] = receiver_email
-        msg.set_content(f"Your verification code is: {code}")
-
-        with smtplib.SMTP('smtp-relay.brevo.com', 587) as smtp:
-            smtp.starttls()
-            smtp.login('8f06f4002@smtp-brevo.com', 'g5OsRyTUfJnXtM96')
-            smtp.send_message(msg)
-
-        print(f"✅ Verification email sent to {receiver_email}")
-    except Exception as e:
-        print(f"❌ Failed to send email: {e}")
-
-
-def send_verification_email(receiver_email, code):
-    try:
-        msg = EmailMessage()
-        msg['Subject'] = 'Your Verification Code'
-        msg['From'] = '22wh1a1215@bvrithyderabad.edu.in'  # Your Gmail address
-        msg['To'] = receiver_email
-        msg.set_content(f"Your verification code is: {code}")
-
-        with smtplib.SMTP('smtp.gmail.com', 587) as smtp:
-            smtp.starttls()
-            smtp.login('22wh1a1215@bvrithyderabad.edu.in', 'lhvcjbdvwqtxwazo')  # Your Gmail + App password
-            smtp.send_message(msg)
-
-        print(f"✅ Verification email sent to {receiver_email}")
-    except Exception as e:
-        print(f"❌ Failed to send email: {e}")
-
 
 @app.route("/login", methods=["POST"])
 def login():
