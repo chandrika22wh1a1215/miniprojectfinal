@@ -190,24 +190,22 @@ def verify_code():
     if not email or not code:
         return jsonify({"message": "Missing email or code"}), 400
 
-    now = datetime.utcnow()
     record = pending_verifications.find_one({"email": email})
-
     if not record or str(record.get("verification_code")) != str(code):
         return jsonify({"message": "Invalid verification code"}), 400
 
+    now = datetime.utcnow()
     if record.get("expires_at") and now > record["expires_at"]:
         return jsonify({"message": "Verification code expired"}), 400
 
-    # ✅ Safeguard field access
-    try:
-        full_name = record["full_name"]
-        password = record["password"]
-        dob = record["dob"]
-    except KeyError:
-        return jsonify({"message": "Incomplete registration info"}), 500
+    # ✅ Safe field extraction with default fallback
+    full_name = record.get("full_name")
+    password = record.get("password")
+    dob = record.get("dob")
 
-    # ✅ Move to users
+    if not all([full_name, password, dob]):
+        return jsonify({"message": "Incomplete registration info. Please register again."}), 500
+
     if not users.find_one({"email": email}):
         users.insert_one({
             "full_name": full_name,
@@ -217,11 +215,8 @@ def verify_code():
             "created_at": record["created_at"]
         })
 
-    # ✅ Clean up
     pending_verifications.delete_one({"email": email})
     return jsonify({"message": "Email verified successfully"}), 200
-
-
 
 
 @app.route("/resend-code", methods=["POST"])
