@@ -180,6 +180,14 @@ def register():
     send_verification_email(email, verification_code)
     return jsonify({"message": "Verification code sent to your email"}), 200
 
+@app.route("/send-code", methods=["POST"])
+def send_code():
+    email = request.json.get("email")
+    if not email:
+        return jsonify({"error": "Email required"}), 400
+    session['verification_email'] = email
+    # ...your code to generate and send the verification code...
+    return jsonify({"message": "Code sent"})
 
 @app.route("/verify", methods=["POST"])
 def verify_code():
@@ -192,7 +200,7 @@ def verify_code():
         if not code:
             return jsonify({"error": "Code required"}), 400
 
-        # Get email from session or token
+        # Get email from session
         email = session.get('verification_email')
         if not email:
             return jsonify({"error": "Session expired or invalid"}), 400
@@ -225,6 +233,7 @@ def verify_code():
     except Exception as e:
         print(f"Error in /verify: {str(e)}")
         return jsonify({"error": "Internal server error"}), 500
+
 
 @app.route("/resend-code", methods=["POST"])
 def resend_code():
