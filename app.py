@@ -75,34 +75,34 @@ def send_verification_email(receiver_email, code):
         smtp.starttls()
         smtp.login('22wh1a1215@bvrithyderabad.edu.in', 'lhvcjbdvwqtxwazo')  # App password
         smtp.send_message(msg)
-        
+
 @app.route('/api/send-verification-code', methods=['POST'])
 def send_verification_code_route():
-data = request.json
-email = data.get('email')
-if not email:
-return jsonify({'error': 'Email required'}), 400
+    data = request.json
+    email = data.get('email')
+    if not email:
+        return jsonify({'error': 'Email required'}), 400
 
-# Generate code
-code = ''.join(random.choices(string.digits, k=6))
-expires_at = datetime.utcnow() + timedelta(minutes=3)
+    # Generate code
+    code = ''.join(random.choices(string.digits, k=6))
+    expires_at = datetime.utcnow() + timedelta(minutes=3)
 
-# Store in database
-pending_verifications.update_one(
-{"email": email},
-{"$set": {
-"verification_code": code,
-"created_at": datetime.utcnow(),
-"expires_at": expires_at
-}},
-upsert=True
-)
+    # Store in database
+    pending_verifications.update_one(
+        {"email": email},
+        {"$set": {
+            "verification_code": code,
+            "created_at": datetime.utcnow(),
+            "expires_at": expires_at
+        }},
+        upsert=True
+    )
 
-try:
-send_verification_email(email, code)
-return jsonify({'message': 'Verification email sent'}), 200
-except Exception as e:
-return jsonify({'error': str(e)}), 500
+    try:
+        send_verification_email(email, code)
+        return jsonify({'message': 'Verification email sent'}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route("/login", methods=["POST"])
