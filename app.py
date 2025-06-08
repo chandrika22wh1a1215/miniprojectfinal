@@ -202,10 +202,10 @@ def verify_code():
 
     # Move verified data to users collection
     user_data = {
-        "name": record.get("name"),
+        "name": record.get("full_name"),     # <-- use 'full_name' here, not 'name'
         "email": record.get("email"),
-        "dob": record.get("dob"),
-        "password": record.get("password"),  # already hashed when saving
+        "dob": record.get("dob"),            # dob saved as string from registration
+        "password": record.get("password"),  # hashed password
         "created_at": now
     }
 
