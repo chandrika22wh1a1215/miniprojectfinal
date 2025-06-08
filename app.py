@@ -131,17 +131,20 @@ def login():
     access_token = create_access_token(identity=email)
     return jsonify({"access_token": access_token}), 200
 
-
 @app.route("/resumes", methods=["GET"])
 @jwt_required()
 def get_resumes():
     current_user_email = get_jwt_identity()
-    if current_user_email not in ALLOWED_USERS:
-        return jsonify({"msg": "Access forbidden"}), 403
-    data = list(resumes.find({}))
-    for resume in data:
-        resume["_id"] = str(resume["_id"])
+
+    if current_user_email in ALLOWED_USERS:
+        data = list(resumes.find({}))  # Admin sees all
+    else:
+        data = list(resumes.find({"email": current_user_email}))  # User sees own
+
+    for item in data:
+        item["_id"] = str(item["_id"])
     return jsonify(data)
+
 
 
 def extract_text_pymupdf(pdf_path):
@@ -356,12 +359,21 @@ def upload_resume():
         if 'filepath' in locals() and os.path.exists(filepath):
             os.remove(filepath)
 
-@app.route("/resumes/<id>", methods=["PUT"])
+@app.route("/resumes/<id>", methods=["GET"])
 @jwt_required()
-def update_resume(id):
-    updated_data = request.json
-    resumes.update_one({"_id": ObjectId(id)}, {"$set": updated_data})
-    return jsonify({"msg": "Resume updated successfully!"})
+def get_resume_by_id(id):
+    current_user_email = get_jwt_identity()
+    resume = resumes.find_one({"_id": ObjectId(id)})
+
+    if not resume:
+        return jsonify({"msg": "Resume not found"}), 404
+
+    # Restrict access
+    if current_user_email not in ALLOWED_USERS and resume.get("email") != current_user_email:
+        return jsonify({"msg": "Unauthorized"}), 403
+
+    resume["_id"] = str(resume["_id"])
+    return jsonify(resume)
 
 @app.route("/profile", methods=["POST"])
 @jwt_required()
@@ -370,12 +382,12 @@ def add_manual_resume():
         data = request.json
 
         name = data.get("fullName", "").strip()
-        email = data.get("email", "").strip()
+        email = get_jwt_identity()
         phone = data.get("phoneNumber", "").strip()
 
         if not name or any(char.isdigit() for char in name):
             return jsonify({"msg": "Invalid name"}), 400
-        if not email or not re.match(r"[^@]+@[^@]+\.[^@]+", email):
+        if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
             return jsonify({"msg": "Invalid email"}), 400
         if not phone or not phone.isdigit():
             return jsonify({"msg": "Phone must be digits only"}), 400
@@ -441,7 +453,8 @@ Total Experience: {total_years} years
             "Summary": summary,
             "TotalYearsOverall": total_years,
             "ResumeText": resume_text,
-            "SubmittedBy": get_jwt_identity()
+            "SubmittedBy": email,
+            "created_at": datetime.utcnow()
         }
 
         result = resumes.insert_one(resume)
