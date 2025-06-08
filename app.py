@@ -142,41 +142,58 @@ def extract_text_pymupdf(pdf_path):
     doc = fitz.open(pdf_path)
     return ''.join(page.get_text() for page in doc)
 
+
 @app.route("/register", methods=["POST"])
 def register():
     data = request.json
+    print("Received data:", data)  # Debug: print the incoming JSON
+
     full_name = data.get("full_name")
     email = data.get("email")
     password = data.get("password")
     dob_str = data.get("dob")
     confirm_password = data.get("confirm_password")
 
-    print("Received data:", data)  # Debug
+    # Debug: print extracted fields
+    print("Extracted fields:")
+    print("full_name:", full_name)
+    print("email:", email)
+    print("password:", password)
+    print("dob_str:", dob_str)
+    print("confirm_password:", confirm_password)
 
     if not full_name or not email or not password or not dob_str:
+        print("Missing required field")  # Debug
         return jsonify({"error": "Full name, email, password and DOB required"}), 400
 
     password_regex = r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&])[A-Za-z\d!@#$%^&]{8,}$'
     if not re.match(password_regex, password):
+        print("Password too weak")  # Debug
         return jsonify({"error": "Password too weak"}), 400
     if password != confirm_password:
+        print("Passwords do not match")  # Debug
         return jsonify({"error": "Passwords do not match"}), 400
 
     try:
         dob = datetime.strptime(dob_str, "%d-%m-%Y")
     except ValueError:
+        print("Invalid DOB format")  # Debug
         return jsonify({"error": "DOB must be in dd-mm-yyyy format"}), 400
 
     if users.find_one({"email": email}):
+        print("User already registered")  # Debug
         return jsonify({"error": "User already registered"}), 409
 
     hashed_password = bcrypt.generate_password_hash(password).decode("utf-8")
+    verification_code = ''.join(random.choices(string.digits, k=6))
 
-    print("Before storing in pending_verifications:")
+    # Debug: print what will be stored
+    print("Storing in pending_verifications:")
     print("full_name:", full_name)
     print("email:", email)
     print("hashed_password:", hashed_password)
     print("dob_str:", dob_str)
+    print("verification_code:", verification_code)
 
     pending_verifications.update_one(
         {"email": email},
@@ -184,17 +201,18 @@ def register():
             "full_name": full_name,
             "password": hashed_password,
             "dob": dob_str,
-            "verification_code": ''.join(random.choices(string.digits, k=6)),
+            "verification_code": verification_code,
             "created_at": datetime.utcnow()
         }},
         upsert=True
     )
 
-    print("Record stored in pending_verifications:", pending_verifications.find_one({"email": email}))  # Debug
+    # Debug: print the stored record
+    record = pending_verifications.find_one({"email": email})
+    print("Record stored in pending_verifications:", record)
 
     send_verification_email(email, verification_code)
     return jsonify({"message": "Verification code sent to your email"}), 200
-
 
 @app.route("/verify", methods=["POST"])
 def verify_code():
