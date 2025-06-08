@@ -20,7 +20,7 @@ import string
 import smtplib
 
 
-app = Flask(_name_)
+app = Flask(__name__)
 bcrypt = Bcrypt(app)
 CORS(app, origins=[
     "https://resumefrontend-rif3.onrender.com",
@@ -424,5 +424,5 @@ Total Experience: {total_years} years
         traceback.print_exc()
         return jsonify({"msg": f"Internal Server Error: {str(e)}"}), 500
 
-if _name_ == "_main_":
+if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0")
