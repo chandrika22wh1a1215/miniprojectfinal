@@ -329,7 +329,6 @@ def reset_password():
     return jsonify({"message": "Password reset successful"}), 200
 
 @app.route("/upload_resume", methods=["POST"])
-@jwt_required()
 def upload_resume():
     if 'file' not in request.files:
         return jsonify({"msg": "No file part in the request"}), 400
