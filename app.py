@@ -207,7 +207,7 @@ def verify_code():
             return jsonify({"message": "Verification code expired"}), 400
 
         user_data = {
-            "name": record.get("full_name"),  # <-- Fix this field
+            "full_name": record.get("full_name"),  # <-- Changed to "full_name"
             "email": record.get("email"),
             "dob": record.get("dob"),
             "password": record.get("password"),
@@ -220,9 +220,7 @@ def verify_code():
         return jsonify({"message": "Email verified and user account created"}), 200
 
     except Exception as e:
-        # Log the error for debugging
         print(f"Error in /verify: {str(e)}")
-        # Optionally, log to a file as well
         return jsonify({"error": "Internal server error"}), 500
 
 @app.route("/resend-code", methods=["POST"])
