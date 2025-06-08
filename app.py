@@ -8,7 +8,6 @@ from email.message import EmailMessage
 from datetime import datetime, timedelta
 from flask import session
 from flask_bcrypt import Bcrypt
-bcrypt = Bcrypt(app)
 from flask_jwt_extended import (
     JWTManager, create_access_token, jwt_required, get_jwt_identity
 )
@@ -22,6 +21,7 @@ import smtplib
 
 
 app = Flask(__name__)
+bcrypt = Bcrypt(app)
 CORS(app, origins=[
     "https://resumefrontend-rif3.onrender.com",
     "https://mini-project-eight-amber.vercel.app"
