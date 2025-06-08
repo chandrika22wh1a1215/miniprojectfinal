@@ -142,7 +142,6 @@ def extract_text_pymupdf(pdf_path):
     doc = fitz.open(pdf_path)
     return ''.join(page.get_text() for page in doc)
 
-
 @app.route("/register", methods=["POST"])
 def register():
     data = request.json
@@ -155,7 +154,7 @@ def register():
     if not full_name or not email or not password or not dob_str:
         return jsonify({"error": "Full name, email, password and DOB required"}), 400
 
-    password_regex = r'^(?=.[a-z])(?=.[A-Z])(?=.\d)(?=.[!@#$%^&])[A-Za-z\d!@#$%^&]{8,}$'
+    password_regex = r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&])[A-Za-z\d!@#$%^&]{8,}$'
     if not re.match(password_regex, password):
         return jsonify({"error": "Password too weak"}), 400
     if password != confirm_password:
@@ -172,6 +171,14 @@ def register():
     hashed_password = bcrypt.generate_password_hash(password).decode("utf-8")
     verification_code = ''.join(random.choices(string.digits, k=6))
 
+    # Debug: Print what will be stored
+    print("Storing in pending_verifications:")
+    print("full_name:", full_name)
+    print("email:", email)
+    print("hashed_password:", hashed_password)
+    print("dob_str:", dob_str)
+    print("verification_code:", verification_code)
+
     pending_verifications.update_one(
         {"email": email},
         {"$set": {
@@ -184,7 +191,11 @@ def register():
         upsert=True
     )
 
-    send_verification_email(email, verification_code)
+    # Optional: Print the stored record for confirmation
+    record = pending_verifications.find_one({"email": email})
+    print("Record stored in pending_verifications:", record)
+
+    send_verification_email(email, verification_code)  # Make sure this function exists
     return jsonify({"message": "Verification code sent to your email"}), 200
 
 @app.route("/verify", methods=["POST"])
@@ -199,6 +210,7 @@ def verify_code():
 
         now = datetime.utcnow()
         record = pending_verifications.find_one({"email": email})
+        print("Record retrieved from pending_verifications:", record)  # Debug
 
         if not record or str(record.get("verification_code")) != str(code):
             return jsonify({"message": "Invalid verification code"}), 400
@@ -207,12 +219,13 @@ def verify_code():
             return jsonify({"message": "Verification code expired"}), 400
 
         user_data = {
-            "full_name": record.get("full_name"),  # <-- Changed to "full_name"
+            "full_name": record.get("full_name"),
             "email": record.get("email"),
             "dob": record.get("dob"),
             "password": record.get("password"),
             "created_at": now
         }
+        print("User data to be stored in users:", user_data)  # Debug
 
         users.insert_one(user_data)
         pending_verifications.delete_one({"_id": record["_id"]})
