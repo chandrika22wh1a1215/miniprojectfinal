@@ -143,7 +143,7 @@ def extract_text_pymupdf(pdf_path):
     return ''.join(page.get_text() for page in doc)
 
 
-@app.route('/register', methods=['POST'])
+@app.route("/register", methods=["POST"])
 def register():
     data = request.json
     full_name = data.get("full_name")
@@ -155,7 +155,7 @@ def register():
     if not full_name or not email or not password or not dob_str:
         return jsonify({"error": "Full name, email, password and DOB required"}), 400
 
-    password_regex = r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&]).{8,}$'
+    password_regex = r'^(?=.[a-z])(?=.[A-Z])(?=.\d)(?=.[!@#$%^&])[A-Za-z\d!@#$%^&]{8,}$'
     if not re.match(password_regex, password):
         return jsonify({"error": "Password too weak"}), 400
     if password != confirm_password:
@@ -179,8 +179,7 @@ def register():
             "password": hashed_password,
             "dob": dob_str,
             "verification_code": verification_code,
-            "created_at": datetime.utcnow(),
-            "expires_at": datetime.utcnow() + timedelta(minutes=3)
+            "created_at": datetime.utcnow()
         }},
         upsert=True
     )
@@ -197,30 +196,33 @@ def verify_code():
     if not email or not code:
         return jsonify({"message": "Missing email or code"}), 400
 
+    now = datetime.utcnow()
     record = pending_verifications.find_one({"email": email})
-    if not record:
-        return jsonify({"message": "No pending verification found"}), 400
 
-    if str(record.get("verification_code")) != str(code):
+    if not record or str(record.get("verification_code")) != str(code):
         return jsonify({"message": "Invalid verification code"}), 400
 
-    now = datetime.utcnow()
     if record.get("expires_at") and now > record["expires_at"]:
         return jsonify({"message": "Verification code expired"}), 400
 
-    if not all([record.get("full_name"), record.get("password"), record.get("dob")]):
-        return jsonify({"message": "Incomplete registration details"}), 400
+    # Move verified data to users collection
+    pending_verifications.update_one(
+        {"email": email},
+        {"$set": {
+            "name": full_name,
+            "password": hashed_password,
+            "dob": dob_str,
+            "verification_code": verification_code,
+            "created_at": datetime.utcnow()
+        }},
+        upsert=True
+    )
 
-    user_data = {
-        "name": record["full_name"],
-        "email": email,
-        "dob": record["dob"],
-        "password": record["password"],
-        "created_at": now
-    }
+
 
     users.insert_one(user_data)
-    pending_verifications.delete_one({"email": email})
+    pending_verifications.delete_one({"_id": record["_id"]})
+
     return jsonify({"message": "Email verified and user account created"}), 200
 
 
