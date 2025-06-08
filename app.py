@@ -192,57 +192,37 @@ def verify_code():
         if not email or not code:
             return jsonify({"message": "Missing email or code"}), 400
 
+        now = datetime.utcnow()
         record = pending_verifications.find_one({"email": email})
-        print("DEBUG: Found pending record:", record)
 
-        if not record:
-            return jsonify({"message": "No pending verification found"}), 400
-
-        if str(record.get("verification_code")) != str(code):
+        if not record or str(record.get("verification_code")) != str(code):
             return jsonify({"message": "Invalid verification code"}), 400
 
-        now = datetime.utcnow()
-        expires_at = record.get("expires_at")
-
-        if expires_at and now > expires_at:
+        if record.get("expires_at") and now > record["expires_at"]:
             return jsonify({"message": "Verification code expired"}), 400
 
-        # Collect fields from pending_verifications
+        # Extract full user data
         full_name = record.get("full_name")
         password = record.get("password")
         dob = record.get("dob")
+        created_at = record.get("created_at", datetime.utcnow())
 
         if not all([full_name, password, dob]):
-            print("DEBUG: Missing registration fields:", full_name, password, dob)
-            return jsonify({"message": "Incomplete registration data"}), 500
+            return jsonify({"message": "Incomplete registration info. Please register again."}), 500
 
-        # Check if user already exists
-        if users.find_one({"email": email}):
-            print("DEBUG: User already exists")
-        else:
-            # Optional: Hash password before saving
-            hashed_pw = bcrypt.generate_password_hash(password).decode('utf-8')
+        # Store in users collection
+        users.insert_one({
+            "full_name": full_name,
+            "email": email,
+            "password": password,
+            "dob": dob,
+            "created_at": created_at
+        })
 
-            user_data = {
-                "full_name": full_name,
-                "email": email,
-                "password": hashed_pw,
-                "dob": dob,
-                "created_at": record.get("created_at", datetime.utcnow())
-            }
-
-            try:
-                result = users.insert_one(user_data)
-                print("DEBUG: User inserted:", result.inserted_id)
-            except Exception as insert_err:
-                print("ERROR: Failed to insert user", insert_err)
-                return jsonify({"message": "Database insert error"}), 500
-
-        # Remove the verification record
+        # Remove from pending_verifications
         pending_verifications.delete_one({"email": email})
-        print("DEBUG: Deleted pending verification")
 
-        return jsonify({"message": "Email verified and user created successfully"}), 200
+        return jsonify({"message": "Email verified successfully"}), 200
 
     except Exception as e:
         import traceback
