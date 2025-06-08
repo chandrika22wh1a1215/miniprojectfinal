@@ -8,6 +8,7 @@ from email.message import EmailMessage
 from datetime import datetime, timedelta
 from flask import session
 from flask_bcrypt import Bcrypt
+bcrypt = Bcrypt(app)
 from flask_jwt_extended import (
     JWTManager, create_access_token, jwt_required, get_jwt_identity
 )
@@ -181,13 +182,10 @@ def register():
     send_verification_email(email, verification_code)
     return jsonify({"message": "Verification code sent to your email"}), 200
 
-
 @app.route("/verify", methods=["POST"])
 def verify_code():
     try:
         data = request.json
-        print("DEBUG: Incoming data:", data)
-
         email = data.get("email")
         code = data.get("code")
 
@@ -195,36 +193,59 @@ def verify_code():
             return jsonify({"message": "Missing email or code"}), 400
 
         record = pending_verifications.find_one({"email": email})
-        print("DEBUG: Retrieved record:", record)
+        print("DEBUG: Found pending record:", record)
 
-        if not record or str(record.get("verification_code")) != str(code):
+        if not record:
+            return jsonify({"message": "No pending verification found"}), 400
+
+        if str(record.get("verification_code")) != str(code):
             return jsonify({"message": "Invalid verification code"}), 400
 
         now = datetime.utcnow()
-        if record.get("expires_at") and now > record["expires_at"]:
+        expires_at = record.get("expires_at")
+
+        if expires_at and now > expires_at:
             return jsonify({"message": "Verification code expired"}), 400
 
+        # Collect fields from pending_verifications
         full_name = record.get("full_name")
         password = record.get("password")
         dob = record.get("dob")
 
         if not all([full_name, password, dob]):
-            return jsonify({"message": "Incomplete registration info. Please register again."}), 500
+            print("DEBUG: Missing registration fields:", full_name, password, dob)
+            return jsonify({"message": "Incomplete registration data"}), 500
 
-        if not users.find_one({"email": email}):
-            users.insert_one({
+        # Check if user already exists
+        if users.find_one({"email": email}):
+            print("DEBUG: User already exists")
+        else:
+            # Optional: Hash password before saving
+            hashed_pw = bcrypt.generate_password_hash(password).decode('utf-8')
+
+            user_data = {
                 "full_name": full_name,
                 "email": email,
-                "password": password,
+                "password": hashed_pw,
                 "dob": dob,
                 "created_at": record.get("created_at", datetime.utcnow())
-            })
+            }
 
+            try:
+                result = users.insert_one(user_data)
+                print("DEBUG: User inserted:", result.inserted_id)
+            except Exception as insert_err:
+                print("ERROR: Failed to insert user", insert_err)
+                return jsonify({"message": "Database insert error"}), 500
+
+        # Remove the verification record
         pending_verifications.delete_one({"email": email})
-        return jsonify({"message": "Email verified successfully"}), 200
+        print("DEBUG: Deleted pending verification")
+
+        return jsonify({"message": "Email verified and user created successfully"}), 200
 
     except Exception as e:
-        print("ERROR:", str(e))
+        import traceback
         traceback.print_exc()
         return jsonify({"message": "Server error"}), 500
 
