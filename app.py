@@ -1,37 +1,39 @@
-from flask import Flask, request, jsonify, session
+from flask import Flask, request, jsonify
+from pymongo import MongoClient
+from bson.objectid import ObjectId
+import os
 from flask_cors import CORS
+from werkzeug.utils import secure_filename
+from email.message import EmailMessage
+from datetime import datetime, timedelta
+from flask import session
 from flask_bcrypt import Bcrypt
 from flask_jwt_extended import (
     JWTManager, create_access_token, jwt_required, get_jwt_identity
 )
-from pymongo import MongoClient
-from bson.objectid import ObjectId
-from werkzeug.utils import secure_filename
-from email.message import EmailMessage
-from datetime import datetime, timedelta
 import fitz  # PyMuPDF
-import os
-import smtplib
+import tempfile
+import traceback
+import re
 import random
 import string
-import re
+import smtplib
 
-app = Flask(__name__)
+
+app = Flask(_name_)
 bcrypt = Bcrypt(app)
-
-# Allow your frontend origins for CORS
 CORS(app, origins=[
     "https://resumefrontend-rif3.onrender.com",
     "https://mini-project-eight-amber.vercel.app"
 ])
 
-app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024  # Max 2MB upload size
+app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024
 app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY", "your-secret-key")
-app.config["JWT_ACCESS_TOKEN_EXPIRES"] = False  # Tokens never expire for simplicity (adjust as needed)
+app.config["JWT_ACCESS_TOKEN_EXPIRES"] = False
 
+bcrypt = Bcrypt(app)
 jwt = JWTManager(app)
 
-# MongoDB setup
 mongo_uri = "mongodb+srv://22wh1a1215:Resume@cluster0.fu4wtmw.mongodb.net/job_scraping_db?retryWrites=true&w=majority"
 client = MongoClient(mongo_uri)
 db = client["job_scraping_db"]
@@ -39,7 +41,6 @@ resumes = db["resumes"]
 users = db["users"]
 pending_verifications = db["pending_verifications"]
 
-# Allowed users for protected routes
 ALLOWED_USERS = {
     "22wh1a1215@bvrithyderabad.edu.in",
     "22wh1a1239@bvrithyderabad.edu.in",
@@ -49,25 +50,20 @@ ALLOWED_USERS = {
 login_attempts = {}
 MAX_ATTEMPTS = 3
 
-
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() == 'pdf'
-
 
 @app.route('/')
 def home():
     return "Flask app is running!"
 
-
-@app.route('/dbtest')
+@app.route("/dbtest")
 def db_test():
     return jsonify({"msg": "MongoDB connection successful!"})
 
-
-@app.route('/test')
+@app.route("/test")
 def test():
     return "Test route working!"
-
 
 def send_verification_email(receiver_email, code):
     msg = EmailMessage()
@@ -78,9 +74,8 @@ def send_verification_email(receiver_email, code):
 
     with smtplib.SMTP('smtp.gmail.com', 587) as smtp:
         smtp.starttls()
-        smtp.login('22wh1a1215@bvrithyderabad.edu.in', 'lhvcjbdvwqtxwazo')
+        smtp.login('22wh1a1215@bvrithyderabad.edu.in', 'lhvcjbdvwqtxwazo')  # App password
         smtp.send_message(msg)
-
 
 @app.route('/api/send-verification-code', methods=['POST'])
 def send_verification_code_route():
@@ -89,9 +84,11 @@ def send_verification_code_route():
     if not email:
         return jsonify({'error': 'Email required'}), 400
 
+    # Generate code
     code = ''.join(random.choices(string.digits, k=6))
     expires_at = datetime.utcnow() + timedelta(minutes=3)
 
+    # Store in database
     pending_verifications.update_one(
         {"email": email},
         {"$set": {
@@ -109,24 +106,19 @@ def send_verification_code_route():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/login', methods=['POST'])
+@app.route("/login", methods=["POST"])
 def login():
     data = request.json
-    email = data.get('email')
-    password = data.get('password')
-    if not email or not password:
-        return jsonify({"msg": "Email and password required"}), 400
-
+    email = data.get("email")
+    password = data.get("password")
     if email not in login_attempts:
         login_attempts[email] = 0
-
     user = users.find_one({"email": email})
     if not user or not bcrypt.check_password_hash(user["password"], password):
         login_attempts[email] += 1
         if login_attempts[email] >= MAX_ATTEMPTS:
             return jsonify({"msg": "Invalid credentials", "show_forgot": True}), 401
         return jsonify({"msg": "Invalid credentials"}), 401
-
     login_attempts[email] = 0
     access_token = create_access_token(identity=email)
     return jsonify({"access_token": access_token}), 200
@@ -135,27 +127,20 @@ def login():
 @jwt_required()
 def get_resumes():
     current_user_email = get_jwt_identity()
-
-    if current_user_email in ALLOWED_USERS:
-        data = list(resumes.find({}))  # Admin sees all
-    else:
-        data = list(resumes.find({"email": current_user_email}))  # User sees own
-
-    for item in data:
-        item["_id"] = str(item["_id"])
+    if current_user_email not in ALLOWED_USERS:
+        return jsonify({"msg": "Access forbidden"}), 403
+    data = list(resumes.find({}))
+    for resume in data:
+        resume["_id"] = str(resume["_id"])
     return jsonify(data)
-
-
 
 def extract_text_pymupdf(pdf_path):
     doc = fitz.open(pdf_path)
     return ''.join(page.get_text() for page in doc)
 
-
 @app.route("/register", methods=["POST"])
 def register():
     data = request.json
-
     full_name = data.get("full_name")
     email = data.get("email")
     password = data.get("password")
@@ -165,7 +150,7 @@ def register():
     if not full_name or not email or not password or not dob_str:
         return jsonify({"error": "Full name, email, password and DOB required"}), 400
 
-    password_regex = r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&])[A-Za-z\d!@#$%^&]{8,}$'
+    password_regex = r'^(?=.[a-z])(?=.[A-Z])(?=.\d)(?=.[!@#$%^&])[A-Za-z\d!@#$%^&]{8,}$'
     if not re.match(password_regex, password):
         return jsonify({"error": "Password too weak"}), 400
     if password != confirm_password:
@@ -181,63 +166,59 @@ def register():
 
     hashed_password = bcrypt.generate_password_hash(password).decode("utf-8")
     verification_code = ''.join(random.choices(string.digits, k=6))
-    expires_at = datetime.utcnow() + timedelta(minutes=3)
 
     pending_verifications.update_one(
-        {"email": email},
-        {"$set": {
-            "full_name": full_name,
-            "password": hashed_password,
-            "dob": dob_str,
-            "verification_code": verification_code,
-            "created_at": datetime.utcnow(),
-            "expires_at": expires_at
-        }},
-        upsert=True
-    )
+    {"email": email},
+    {"$set": {
+        "full_name": full_name,
+        "password": hashed_password,
+        "dob": dob_str,
+        "verification_code": verification_code,
+        "created_at": datetime.utcnow()
+    }},
+    upsert=True
+)
 
-    try:
-        send_verification_email(email, verification_code)
-    except Exception as e:
-        return jsonify({"error": f"Failed to send verification email: {str(e)}"}), 500
 
+    send_verification_email(email, verification_code)
     return jsonify({"message": "Verification code sent to your email"}), 200
-
-
+    
 @app.route("/verify", methods=["POST"])
 def verify_code():
-    try:
-        data = request.json
-        email = data.get("email")
-        code = data.get("code")
+    data = request.json
+    email = data.get("email")
+    code = data.get("code")
 
-        if not email or not code:
-            return jsonify({"message": "Missing email or code"}), 400
+    if not email or not code:
+        return jsonify({"message": "Missing email or code"}), 400
 
-        now = datetime.utcnow()
-        record = pending_verifications.find_one({"email": email})
+    record = pending_verifications.find_one({"email": email})
+    print("Pending Verification Record:", record)  # Debug
 
-        if not record or str(record.get("verification_code")) != str(code):
-            return jsonify({"message": "Invalid verification code"}), 400
+    if not record:
+        return jsonify({"message": "No pending verification found"}), 400
 
-        if record.get("expires_at") and now > record["expires_at"]:
-            return jsonify({"message": "Verification code expired"}), 400
+    if str(record.get("verification_code")) != str(code):
+        return jsonify({"message": "Invalid verification code"}), 400
 
-        user_data = {
-            "full_name": record.get("full_name"),
-            "email": record.get("email"),
-            "dob": record.get("dob"),
-            "password": record.get("password"),
-            "created_at": now
-        }
+    now = datetime.utcnow()
+    if record.get("expires_at") and now > record["expires_at"]:
+        return jsonify({"message": "Verification code expired"}), 400
 
-        users.insert_one(user_data)
-        pending_verifications.delete_one({"_id": record["_id"]})
+    user_data = {
+        "name": record.get("full_name"),
+        "email": record.get("email"),
+        "dob": record.get("dob"),
+        "password": record.get("password"),
+        "created_at": now
+    }
+    print("User data to insert:", user_data)  # Debug
 
-        return jsonify({"message": "Email verified and user account created"}), 200
+    users.insert_one(user_data)
+    pending_verifications.delete_one({"_id": record["_id"]})
 
-    except Exception as e:
-        return jsonify({"error": "Internal server error"}), 500
+    return jsonify({"message": "Email verified and user account created"}), 200
+
 
 
 @app.route("/resend-code", methods=["POST"])
@@ -262,14 +243,8 @@ def resend_code():
             "expires_at": expires_at
         }}
     )
-
-    try:
-        send_verification_email(email, new_code)
-    except Exception as e:
-        return jsonify({"error": f"Failed to resend verification email: {str(e)}"}), 500
-
+    send_verification_email(email, new_code)
     return jsonify({"message": "Verification code resent"}), 200
-
 
 @app.route("/forgot-password", methods=["POST"])
 def forgot_password():
@@ -295,13 +270,8 @@ def forgot_password():
         upsert=True
     )
 
-    try:
-        send_verification_email(email, reset_code)
-    except Exception as e:
-        return jsonify({"error": f"Failed to send reset email: {str(e)}"}), 500
-
+    send_verification_email(email, reset_code)
     return jsonify({"message": "Password reset code sent to your email"}), 200
-
 
 @app.route("/reset-password", methods=["POST"])
 def reset_password():
@@ -316,7 +286,7 @@ def reset_password():
     if new_password != confirm_password:
         return jsonify({"error": "Passwords do not match"}), 400
 
-    password_regex = r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&]).{8,}$'
+    password_regex = r'^(?=.[a-z])(?=.[A-Z])(?=.\d)(?=.[!@#$%^&])[A-Za-z\d!@#$%^&]{8,}$'
     if not re.match(password_regex, new_password):
         return jsonify({"error": "Password too weak"}), 400
 
@@ -328,10 +298,10 @@ def reset_password():
     hashed_password = bcrypt.generate_password_hash(new_password).decode("utf-8")
     users.update_one({"email": email}, {"$set": {"password": hashed_password}})
     pending_verifications.delete_one({"email": email})
-
     return jsonify({"message": "Password reset successful"}), 200
 
 @app.route("/upload_resume", methods=["POST"])
+@jwt_required()
 def upload_resume():
     if 'file' not in request.files:
         return jsonify({"msg": "No file part in the request"}), 400
@@ -359,21 +329,12 @@ def upload_resume():
         if 'filepath' in locals() and os.path.exists(filepath):
             os.remove(filepath)
 
-@app.route("/resumes/<id>", methods=["GET"])
+@app.route("/resumes/<id>", methods=["PUT"])
 @jwt_required()
-def get_resume_by_id(id):
-    current_user_email = get_jwt_identity()
-    resume = resumes.find_one({"_id": ObjectId(id)})
-
-    if not resume:
-        return jsonify({"msg": "Resume not found"}), 404
-
-    # Restrict access
-    if current_user_email not in ALLOWED_USERS and resume.get("email") != current_user_email:
-        return jsonify({"msg": "Unauthorized"}), 403
-
-    resume["_id"] = str(resume["_id"])
-    return jsonify(resume)
+def update_resume(id):
+    updated_data = request.json
+    resumes.update_one({"_id": ObjectId(id)}, {"$set": updated_data})
+    return jsonify({"msg": "Resume updated successfully!"})
 
 @app.route("/profile", methods=["POST"])
 @jwt_required()
@@ -382,12 +343,12 @@ def add_manual_resume():
         data = request.json
 
         name = data.get("fullName", "").strip()
-        email = get_jwt_identity()
+        email = data.get("email", "").strip()
         phone = data.get("phoneNumber", "").strip()
 
         if not name or any(char.isdigit() for char in name):
             return jsonify({"msg": "Invalid name"}), 400
-        if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
+        if not email or not re.match(r"[^@]+@[^@]+\.[^@]+", email):
             return jsonify({"msg": "Invalid email"}), 400
         if not phone or not phone.isdigit():
             return jsonify({"msg": "Phone must be digits only"}), 400
@@ -453,8 +414,7 @@ Total Experience: {total_years} years
             "Summary": summary,
             "TotalYearsOverall": total_years,
             "ResumeText": resume_text,
-            "SubmittedBy": email,
-            "created_at": datetime.utcnow()
+            "SubmittedBy": get_jwt_identity()
         }
 
         result = resumes.insert_one(resume)
@@ -464,5 +424,5 @@ Total Experience: {total_years} years
         traceback.print_exc()
         return jsonify({"msg": f"Internal Server Error: {str(e)}"}), 500
 
-if __name__ == "__main__":
+if _name_ == "_main_":
     app.run(debug=True, host="0.0.0.0")
