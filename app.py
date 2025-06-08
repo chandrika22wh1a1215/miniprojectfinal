@@ -16,20 +16,22 @@ import random
 import string
 import re
 
-app = Flask(__name__)  # Fixed typo
+app = Flask(__name__)
 bcrypt = Bcrypt(app)
 
+# Allow your frontend origins for CORS
 CORS(app, origins=[
     "https://resumefrontend-rif3.onrender.com",
     "https://mini-project-eight-amber.vercel.app"
 ])
 
-app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024
+app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024  # Max 2MB upload size
 app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY", "your-secret-key")
-app.config["JWT_ACCESS_TOKEN_EXPIRES"] = False
+app.config["JWT_ACCESS_TOKEN_EXPIRES"] = False  # Tokens never expire for simplicity (adjust as needed)
 
 jwt = JWTManager(app)
 
+# MongoDB setup
 mongo_uri = "mongodb+srv://22wh1a1215:Resume@cluster0.fu4wtmw.mongodb.net/job_scraping_db?retryWrites=true&w=majority"
 client = MongoClient(mongo_uri)
 db = client["job_scraping_db"]
@@ -37,6 +39,7 @@ resumes = db["resumes"]
 users = db["users"]
 pending_verifications = db["pending_verifications"]
 
+# Allowed users for protected routes
 ALLOWED_USERS = {
     "22wh1a1215@bvrithyderabad.edu.in",
     "22wh1a1239@bvrithyderabad.edu.in",
@@ -111,6 +114,9 @@ def login():
     data = request.json
     email = data.get('email')
     password = data.get('password')
+    if not email or not password:
+        return jsonify({"msg": "Email and password required"}), 400
+
     if email not in login_attempts:
         login_attempts[email] = 0
 
@@ -146,7 +152,6 @@ def extract_text_pymupdf(pdf_path):
 @app.route("/register", methods=["POST"])
 def register():
     data = request.json
-    print("Received data:", data)  # Debug: print the incoming JSON
 
     full_name = data.get("full_name")
     email = data.get("email")
@@ -154,46 +159,26 @@ def register():
     dob_str = data.get("dob")
     confirm_password = data.get("confirm_password")
 
-    # Debug: print extracted fields
-    print("Extracted fields:")
-    print("full_name:", full_name)
-    print("email:", email)
-    print("password:", password)
-    print("dob_str:", dob_str)
-    print("confirm_password:", confirm_password)
-
     if not full_name or not email or not password or not dob_str:
-        print("Missing required field")  # Debug
         return jsonify({"error": "Full name, email, password and DOB required"}), 400
 
     password_regex = r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&])[A-Za-z\d!@#$%^&]{8,}$'
     if not re.match(password_regex, password):
-        print("Password too weak")  # Debug
         return jsonify({"error": "Password too weak"}), 400
     if password != confirm_password:
-        print("Passwords do not match")  # Debug
         return jsonify({"error": "Passwords do not match"}), 400
 
     try:
         dob = datetime.strptime(dob_str, "%d-%m-%Y")
     except ValueError:
-        print("Invalid DOB format")  # Debug
         return jsonify({"error": "DOB must be in dd-mm-yyyy format"}), 400
 
     if users.find_one({"email": email}):
-        print("User already registered")  # Debug
         return jsonify({"error": "User already registered"}), 409
 
     hashed_password = bcrypt.generate_password_hash(password).decode("utf-8")
     verification_code = ''.join(random.choices(string.digits, k=6))
-
-    # Debug: print what will be stored
-    print("Storing in pending_verifications:")
-    print("full_name:", full_name)
-    print("email:", email)
-    print("hashed_password:", hashed_password)
-    print("dob_str:", dob_str)
-    print("verification_code:", verification_code)
+    expires_at = datetime.utcnow() + timedelta(minutes=3)
 
     pending_verifications.update_one(
         {"email": email},
@@ -202,17 +187,19 @@ def register():
             "password": hashed_password,
             "dob": dob_str,
             "verification_code": verification_code,
-            "created_at": datetime.utcnow()
+            "created_at": datetime.utcnow(),
+            "expires_at": expires_at
         }},
         upsert=True
     )
 
-    # Debug: print the stored record
-    record = pending_verifications.find_one({"email": email})
-    print("Record stored in pending_verifications:", record)
+    try:
+        send_verification_email(email, verification_code)
+    except Exception as e:
+        return jsonify({"error": f"Failed to send verification email: {str(e)}"}), 500
 
-    send_verification_email(email, verification_code)
     return jsonify({"message": "Verification code sent to your email"}), 200
+
 
 @app.route("/verify", methods=["POST"])
 def verify_code():
@@ -226,7 +213,6 @@ def verify_code():
 
         now = datetime.utcnow()
         record = pending_verifications.find_one({"email": email})
-        print("Record retrieved from pending_verifications:", record)  # Debug
 
         if not record or str(record.get("verification_code")) != str(code):
             return jsonify({"message": "Invalid verification code"}), 400
@@ -241,7 +227,6 @@ def verify_code():
             "password": record.get("password"),
             "created_at": now
         }
-        print("User data to be stored in users:", user_data)  # Debug
 
         users.insert_one(user_data)
         pending_verifications.delete_one({"_id": record["_id"]})
@@ -249,8 +234,8 @@ def verify_code():
         return jsonify({"message": "Email verified and user account created"}), 200
 
     except Exception as e:
-        print(f"Error in /verify: {str(e)}")
         return jsonify({"error": "Internal server error"}), 500
+
 
 @app.route("/resend-code", methods=["POST"])
 def resend_code():
@@ -275,7 +260,11 @@ def resend_code():
         }}
     )
 
-    send_verification_email(email, new_code)
+    try:
+        send_verification_email(email, new_code)
+    except Exception as e:
+        return jsonify({"error": f"Failed to resend verification email: {str(e)}"}), 500
+
     return jsonify({"message": "Verification code resent"}), 200
 
 
@@ -303,7 +292,11 @@ def forgot_password():
         upsert=True
     )
 
-    send_verification_email(email, reset_code)
+    try:
+        send_verification_email(email, reset_code)
+    except Exception as e:
+        return jsonify({"error": f"Failed to send reset email: {str(e)}"}), 500
+
     return jsonify({"message": "Password reset code sent to your email"}), 200
 
 
