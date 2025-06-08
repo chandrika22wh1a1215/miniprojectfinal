@@ -189,7 +189,7 @@ def register():
     return jsonify({"message": "Verification code sent to your email"}), 200
 
 
-@app.route('/verify', methods=['POST'])
+@app.route("/verify", methods=["POST"])
 def verify_code():
     data = request.json
     email = data.get("email")
@@ -201,22 +201,28 @@ def verify_code():
     record = pending_verifications.find_one({"email": email})
     if not record:
         return jsonify({"message": "No pending verification found"}), 400
+
     if str(record.get("verification_code")) != str(code):
         return jsonify({"message": "Invalid verification code"}), 400
-    if record.get("expires_at") and datetime.utcnow() > record["expires_at"]:
+
+    now = datetime.utcnow()
+    if record.get("expires_at") and now > record["expires_at"]:
         return jsonify({"message": "Verification code expired"}), 400
 
+    # Fix: Use direct key access instead of get()
     user_data = {
-        "name": record.get("full_name"),
-        "email": email,
-        "dob": record.get("dob"),
-        "password": record.get("password"),
-        "created_at": datetime.utcnow()
+        "name": record["full_name"],
+        "email": record["email"],
+        "dob": record["dob"],
+        "password": record["password"],
+        "created_at": now
     }
 
     users.insert_one(user_data)
-    pending_verifications.delete_one({"email": email})
+    pending_verifications.delete_one({"_id": record["_id"]})
+
     return jsonify({"message": "Email verified and user account created"}), 200
+
 
 
 @app.route("/resend-code", methods=["POST"])
