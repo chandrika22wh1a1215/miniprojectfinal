@@ -209,7 +209,12 @@ def verify_code():
     if record.get("expires_at") and now > record["expires_at"]:
         return jsonify({"message": "Verification code expired"}), 400
 
-    # Fix: Use direct key access instead of get()
+    # ✅ Check required fields
+    required_fields = ["full_name", "email", "dob", "password"]
+    for field in required_fields:
+        if not record.get(field):
+            return jsonify({"error": f"Missing field: {field}"}), 400
+
     user_data = {
         "name": record["full_name"],
         "email": record["email"],
@@ -222,7 +227,6 @@ def verify_code():
     pending_verifications.delete_one({"_id": record["_id"]})
 
     return jsonify({"message": "Email verified and user account created"}), 200
-
 
 
 @app.route("/resend-code", methods=["POST"])
