@@ -188,7 +188,6 @@ def register():
     send_verification_email(email, verification_code)
     return jsonify({"message": "Verification code sent to your email"}), 200
 
-
 @app.route("/verify", methods=["POST"])
 def verify_code():
     data = request.json
@@ -209,23 +208,19 @@ def verify_code():
     if record.get("expires_at") and now > record["expires_at"]:
         return jsonify({"message": "Verification code expired"}), 400
 
-    # ✅ Check required fields
-    required_fields = ["full_name", "email", "dob", "password"]
-    for field in required_fields:
-        if not record.get(field):
-            return jsonify({"error": f"Missing field: {field}"}), 400
+    if not all([record.get("full_name"), record.get("password"), record.get("dob")]):
+        return jsonify({"message": "Incomplete registration details"}), 400
 
     user_data = {
         "name": record["full_name"],
-        "email": record["email"],
+        "email": email,
         "dob": record["dob"],
         "password": record["password"],
         "created_at": now
     }
 
     users.insert_one(user_data)
-    pending_verifications.delete_one({"_id": record["_id"]})
-
+    pending_verifications.delete_one({"email": email})
     return jsonify({"message": "Email verified and user account created"}), 200
 
 
