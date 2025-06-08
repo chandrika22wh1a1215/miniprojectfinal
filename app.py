@@ -184,51 +184,35 @@ def register():
 
 @app.route("/verify", methods=["POST"])
 def verify_code():
-    try:
-        data = request.json
-        email = data.get("email")
-        code = data.get("code")
+    data = request.json
+    email = data.get("email")
+    code = data.get("code")
 
-        if not email or not code:
-            return jsonify({"message": "Missing email or code"}), 400
+    if not email or not code:
+        return jsonify({"message": "Missing email or code"}), 400
 
-        now = datetime.utcnow()
-        record = pending_verifications.find_one({"email": email})
+    now = datetime.utcnow()
+    record = pending_verifications.find_one({"email": email})
 
-        if not record or str(record.get("verification_code")) != str(code):
-            return jsonify({"message": "Invalid verification code"}), 400
+    if not record or str(record.get("verification_code")) != str(code):
+        return jsonify({"message": "Invalid verification code"}), 400
 
-        if record.get("expires_at") and now > record["expires_at"]:
-            return jsonify({"message": "Verification code expired"}), 400
+    if record.get("expires_at") and now > record["expires_at"]:
+        return jsonify({"message": "Verification code expired"}), 400
 
-        # Extract full user data
-        full_name = record.get("full_name")
-        password = record.get("password")
-        dob = record.get("dob")
-        created_at = record.get("created_at", datetime.utcnow())
+    # Move verified data to users collection
+    user_data = {
+        "name": record.get("name"),
+        "email": record.get("email"),
+        "dob": record.get("dob"),
+        "password": record.get("password"),  # already hashed when saving
+        "created_at": now
+    }
 
-        if not all([full_name, password, dob]):
-            return jsonify({"message": "Incomplete registration info. Please register again."}), 500
+    users.insert_one(user_data)
+    pending_verifications.delete_one({"_id": record["_id"]})
 
-        # Store in users collection
-        users.insert_one({
-            "full_name": full_name,
-            "email": email,
-            "password": password,
-            "dob": dob,
-            "created_at": created_at
-        })
-
-        # Remove from pending_verifications
-        pending_verifications.delete_one({"email": email})
-
-        return jsonify({"message": "Email verified successfully"}), 200
-
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return jsonify({"message": "Server error"}), 500
-
+    return jsonify({"message": "Email verified and user account created"}), 200
 
 
 @app.route("/resend-code", methods=["POST"])
