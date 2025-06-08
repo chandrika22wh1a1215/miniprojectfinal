@@ -151,6 +151,8 @@ def register():
     dob_str = data.get("dob")
     confirm_password = data.get("confirm_password")
 
+    print("Received data:", data)  # Debug
+
     if not full_name or not email or not password or not dob_str:
         return jsonify({"error": "Full name, email, password and DOB required"}), 400
 
@@ -169,15 +171,12 @@ def register():
         return jsonify({"error": "User already registered"}), 409
 
     hashed_password = bcrypt.generate_password_hash(password).decode("utf-8")
-    verification_code = ''.join(random.choices(string.digits, k=6))
 
-    # Debug: Print what will be stored
-    print("Storing in pending_verifications:")
+    print("Before storing in pending_verifications:")
     print("full_name:", full_name)
     print("email:", email)
     print("hashed_password:", hashed_password)
     print("dob_str:", dob_str)
-    print("verification_code:", verification_code)
 
     pending_verifications.update_one(
         {"email": email},
@@ -185,18 +184,17 @@ def register():
             "full_name": full_name,
             "password": hashed_password,
             "dob": dob_str,
-            "verification_code": verification_code,
+            "verification_code": ''.join(random.choices(string.digits, k=6)),
             "created_at": datetime.utcnow()
         }},
         upsert=True
     )
 
-    # Optional: Print the stored record for confirmation
-    record = pending_verifications.find_one({"email": email})
-    print("Record stored in pending_verifications:", record)
+    print("Record stored in pending_verifications:", pending_verifications.find_one({"email": email}))  # Debug
 
-    send_verification_email(email, verification_code)  # Make sure this function exists
+    send_verification_email(email, verification_code)
     return jsonify({"message": "Verification code sent to your email"}), 200
+
 
 @app.route("/verify", methods=["POST"])
 def verify_code():
