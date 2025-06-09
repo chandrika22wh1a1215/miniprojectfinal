@@ -150,7 +150,7 @@ def register():
     if not full_name or not email or not password or not dob_str:
         return jsonify({"error": "Full name, email, password and DOB required"}), 400
 
-    password_regex = r'^(?=.[a-z])(?=.[A-Z])(?=.\d)(?=.[!@#$%^&])[A-Za-z\d!@#$%^&]{8,}$'
+    password_regex = r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&])[A-Za-z\d!@#$%^&]{8,}$'
     if not re.match(password_regex, password):
         return jsonify({"error": "Password too weak"}), 400
     if password != confirm_password:
@@ -168,21 +168,20 @@ def register():
     verification_code = ''.join(random.choices(string.digits, k=6))
 
     pending_verifications.update_one(
-    {"email": email},
-    {"$set": {
-        "full_name": full_name,
-        "password": hashed_password,
-        "dob": dob_str,
-        "verification_code": verification_code,
-        "created_at": datetime.utcnow()
-    }},
-    upsert=True
-)
-
+        {"email": email},
+        {"$set": {
+            "full_name": full_name,
+            "password": hashed_password,
+            "dob": dob_str,
+            "verification_code": verification_code,
+            "created_at": datetime.utcnow()
+        }},
+        upsert=True
+    )
 
     send_verification_email(email, verification_code)
     return jsonify({"message": "Verification code sent to your email"}), 200
-    
+
 @app.route("/verify", methods=["POST"])
 def verify_code():
     data = request.json
@@ -193,8 +192,6 @@ def verify_code():
         return jsonify({"message": "Missing email or code"}), 400
 
     record = pending_verifications.find_one({"email": email})
-    print("Pending Verification Record:", record)  # Debug
-
     if not record:
         return jsonify({"message": "No pending verification found"}), 400
 
@@ -206,19 +203,17 @@ def verify_code():
         return jsonify({"message": "Verification code expired"}), 400
 
     user_data = {
-        "name": record.get("full_name"),
+        "full_name": record.get("full_name"),
         "email": record.get("email"),
         "dob": record.get("dob"),
         "password": record.get("password"),
         "created_at": now
     }
-    print("User data to insert:", user_data)  # Debug
 
     users.insert_one(user_data)
     pending_verifications.delete_one({"_id": record["_id"]})
 
     return jsonify({"message": "Email verified and user account created"}), 200
-
 
 
 @app.route("/resend-code", methods=["POST"])
