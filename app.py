@@ -202,11 +202,16 @@ def verify_code():
     if record.get("expires_at") and now > record["expires_at"]:
         return jsonify({"message": "Verification code expired"}), 400
 
+    # ✅ Check required fields are present
+    required_fields = ["full_name", "email", "dob", "password"]
+    if not all(field in record and record[field] for field in required_fields):
+        return jsonify({"message": "Incomplete verification record. Please register again."}), 400
+
     user_data = {
-        "full_name": record.get("full_name"),
-        "email": record.get("email"),
-        "dob": record.get("dob"),
-        "password": record.get("password"),
+        "full_name": record["full_name"],
+        "email": record["email"],
+        "dob": record["dob"],
+        "password": record["password"],
         "created_at": now
     }
 
@@ -214,6 +219,7 @@ def verify_code():
     pending_verifications.delete_one({"_id": record["_id"]})
 
     return jsonify({"message": "Email verified and user account created"}), 200
+
 
 
 @app.route("/resend-code", methods=["POST"])
