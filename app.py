@@ -191,9 +191,20 @@ def verify_code():
     if record.get("expires_at") and now > record["expires_at"]:
         return jsonify({"message": "Verification code expired"}), 400
 
+    # ✅ Push verified user to 'users'
+    users.insert_one({
+        "full_name": record["full_name"],
+        "email": record["email"],
+        "password": record["password"],
+        "dob": record["dob"],
+        "created_at": now
+    })
+
+    # ✅ Remove from 'pending_verifications'
     pending_verifications.delete_one({"_id": record["_id"]})
 
-    return jsonify({"message": "Email verified successfully"}), 200
+    return jsonify({"message": "Email verified and user registered successfully"}), 200
+
 
 
 @app.route("/resend-code", methods=["POST"])
