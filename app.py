@@ -151,7 +151,6 @@ def register():
     if password != confirm_password:
         return jsonify({"message": "Passwords do not match"}), 400
 
-    # Check both collections to prevent duplicates
     if users.find_one({"email": email}) or pending_verifications.find_one({"email": email}):
         return jsonify({"message": "Email already exists"}), 409
 
@@ -170,13 +169,14 @@ def register():
     })
 
     send_verification_email(email, verification_code)
+
     return jsonify({"message": "Verification email sent"}), 200
 
 @app.route("/verify", methods=["POST"])
 def verify_code():
     data = request.json
-    email = data.get("email", "").strip()  # Ensure email is stripped
-    code = str(data.get("code", "")).strip()  # Always treat code as string and strip
+    email = data.get("email", "").strip()
+    code = str(data.get("code", "")).strip()
 
     if not email or not code:
         return jsonify({"message": "Missing email or code"}), 400
@@ -184,14 +184,12 @@ def verify_code():
     now = datetime.utcnow()
     record = pending_verifications.find_one({"email": email})
 
-    # Compare codes as stripped strings
     if not record or str(record.get("verification_code", "")).strip() != code:
         return jsonify({"message": "Invalid verification code"}), 400
 
     if record["expires_at"] < now:
         return jsonify({"message": "Verification code expired"}), 400
 
-    # Move user to 'users' collection
     user_data = {
         "full_name": record["full_name"],
         "email": record["email"],
@@ -200,12 +198,9 @@ def verify_code():
         "created_at": datetime.utcnow()
     }
     users.insert_one(user_data)
-
-    # Delete from pending
     pending_verifications.delete_one({"_id": record["_id"]})
 
     return jsonify({"message": "Email verified and user registered successfully"}), 200
-
 
 
 @app.route("/resend-code", methods=["POST"])
