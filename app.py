@@ -78,33 +78,27 @@ def send_verification_email(receiver_email, code):
         smtp.login('22wh1a1215@bvrithyderabad.edu.in', 'lhvcjbdvwqtxwazo')
         smtp.send_message(msg)
 
-
 @app.route('/api/send-verification-code', methods=['POST'])
 def send_verification_code_route():
     data = request.json
     email = data.get('email')
+
     if not email:
         return jsonify({'error': 'Email required'}), 400
 
+    # Generate 6-digit verification code
     code = ''.join(random.choices(string.digits, k=6))
-    expires_at = datetime.utcnow() + timedelta(minutes=3)
-
-    pending_verifications.update_one(
-        {"email": email},
-        {"$set": {
-            "verification_code": code,
-            "created_at": datetime.utcnow(),
-            "expires_at": expires_at
-        }},
-        upsert=True
-    )
 
     try:
+        # Send email with the code
         send_verification_email(email, code)
-        return jsonify({'message': 'Verification email sent'}), 200
+
+        # Send OTP to frontend to verify there
+        return jsonify({'message': 'Verification email sent', 'otp': code}), 200
+
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
+        
 
 @app.route('/login', methods=['POST'])
 def login():
@@ -142,115 +136,65 @@ def extract_text_pymupdf(pdf_path):
     doc = fitz.open(pdf_path)
     return ''.join(page.get_text() for page in doc)
 
-
 @app.route("/register", methods=["POST"])
 def register():
     data = request.json
-    print("Received data:", data)  # Debug: print the incoming JSON
-
     full_name = data.get("full_name")
     email = data.get("email")
     password = data.get("password")
-    dob_str = data.get("dob")
     confirm_password = data.get("confirm_password")
+    dob = data.get("dob")
 
-    # Debug: print extracted fields
-    print("Extracted fields:")
-    print("full_name:", full_name)
-    print("email:", email)
-    print("password:", password)
-    print("dob_str:", dob_str)
-    print("confirm_password:", confirm_password)
+    if not all([full_name, email, password, confirm_password, dob]):
+        return jsonify({"message": "All fields are required"}), 400
 
-    if not full_name or not email or not password or not dob_str:
-        print("Missing required field")  # Debug
-        return jsonify({"error": "Full name, email, password and DOB required"}), 400
-
-    password_regex = r'^(?=.[a-z])(?=.[A-Z])(?=.\d)(?=.[!@#$%^&])[A-Za-z\d!@#$%^&]{8,}$'
-    if not re.match(password_regex, password):
-        print("Password too weak")  # Debug
-        return jsonify({"error": "Password too weak"}), 400
     if password != confirm_password:
-        print("Passwords do not match")  # Debug
-        return jsonify({"error": "Passwords do not match"}), 400
+        return jsonify({"message": "Passwords do not match"}), 400
 
-    try:
-        dob = datetime.strptime(dob_str, "%d-%m-%Y")
-    except ValueError:
-        print("Invalid DOB format")  # Debug
-        return jsonify({"error": "DOB must be in dd-mm-yyyy format"}), 400
-
-    if users.find_one({"email": email}):
-        print("User already registered")  # Debug
-        return jsonify({"error": "User already registered"}), 409
+    if users.find_one({"email": email}) or pending_verifications.find_one({"email": email}):
+        return jsonify({"message": "Email already exists"}), 409
 
     hashed_password = bcrypt.generate_password_hash(password).decode("utf-8")
     verification_code = ''.join(random.choices(string.digits, k=6))
+    expires_at = datetime.utcnow() + timedelta(minutes=3)
 
-    # Debug: print what will be stored
-    print("Storing in pending_verifications:")
-    print("full_name:", full_name)
-    print("email:", email)
-    print("hashed_password:", hashed_password)
-    print("dob_str:", dob_str)
-    print("verification_code:", verification_code)
-
-    pending_verifications.update_one(
-        {"email": email},
-        {"$set": {
-            "full_name": full_name,
-            "password": hashed_password,
-            "dob": dob_str,
-            "verification_code": verification_code,
-            "created_at": datetime.utcnow()
-        }},
-        upsert=True
-    )
-
-    # Debug: print the stored record
-    record = pending_verifications.find_one({"email": email})
-    print("Record stored in pending_verifications:", record)
+    pending_verifications.insert_one({
+        "full_name": full_name,
+        "email": email,
+        "password": hashed_password,
+        "dob": dob,
+        "verification_code": verification_code,
+        "created_at": datetime.utcnow(),
+        "expires_at": expires_at
+    })
 
     send_verification_email(email, verification_code)
-    return jsonify({"message": "Verification code sent to your email"}), 200
+
+    return jsonify({"message": "Verification email sent"}), 200
+
 
 @app.route("/verify", methods=["POST"])
 def verify_code():
-    try:
-        data = request.json
-        email = data.get("email")
-        code = data.get("code")
+    data = request.json
+    email = data.get("email")
+    code = data.get("code")
 
-        if not email or not code:
-            return jsonify({"message": "Missing email or code"}), 400
+    if not email or not code:
+        return jsonify({"message": "Missing email or code"}), 400
 
-        now = datetime.utcnow()
-        record = pending_verifications.find_one({"email": email})
-        print("Record retrieved from pending_verifications:", record)  # Debug
+    now = datetime.utcnow()
+    record = pending_verifications.find_one({"email": email})
 
-        if not record or str(record.get("verification_code")) != str(code):
-            return jsonify({"message": "Invalid verification code"}), 400
+    if not record or str(record.get("verification_code")) != str(code):
+        return jsonify({"message": "Invalid verification code"}), 400
 
-        if record.get("expires_at") and now > record["expires_at"]:
-            return jsonify({"message": "Verification code expired"}), 400
+    if record.get("expires_at") and now > record["expires_at"]:
+        return jsonify({"message": "Verification code expired"}), 400
 
-        user_data = {
-            "full_name": record.get("full_name"),
-            "email": record.get("email"),
-            "dob": record.get("dob"),
-            "password": record.get("password"),
-            "created_at": now
-        }
-        print("User data to be stored in users:", user_data)  # Debug
+    pending_verifications.delete_one({"_id": record["_id"]})
 
-        users.insert_one(user_data)
-        pending_verifications.delete_one({"_id": record["_id"]})
+    return jsonify({"message": "Email verified successfully"}), 200
 
-        return jsonify({"message": "Email verified and user account created"}), 200
-
-    except Exception as e:
-        print(f"Error in /verify: {str(e)}")
-        return jsonify({"error": "Internal server error"}), 500
 
 @app.route("/resend-code", methods=["POST"])
 def resend_code():
