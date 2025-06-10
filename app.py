@@ -185,26 +185,26 @@ def verify_code():
     now = datetime.utcnow()
     record = pending_verifications.find_one({"email": email})
 
-    if not record or str(record.get("verification_code")) != str(code):
+    if not record or record.get("verification_code") != code:
         return jsonify({"message": "Invalid verification code"}), 400
 
-    if record.get("expires_at") and now > record["expires_at"]:
+    if record["expires_at"] < now:
         return jsonify({"message": "Verification code expired"}), 400
 
-    # ✅ Push verified user to 'users'
-    users.insert_one({
+    # Move user to 'users' collection
+    user_data = {
         "full_name": record["full_name"],
         "email": record["email"],
         "password": record["password"],
         "dob": record["dob"],
-        "created_at": now
-    })
+        "created_at": datetime.utcnow()
+    }
+    users.insert_one(user_data)
 
-    # ✅ Remove from 'pending_verifications'
+    # Delete from pending
     pending_verifications.delete_one({"_id": record["_id"]})
 
     return jsonify({"message": "Email verified and user registered successfully"}), 200
-
 
 
 @app.route("/resend-code", methods=["POST"])
