@@ -412,32 +412,33 @@ Total Experience: {total_years} years
 
 @app.route('/dashboard', methods=['GET'])
 @jwt_required()
-def get_dashboard_data():
+def dashboard():
     try:
         email = get_jwt_identity()
-        print("Dashboard access by:", email)
+        print("Dashboard accessed by:", email)
 
         if not email:
-            return jsonify({"msg": "Missing or invalid token identity"}), 401
+            return jsonify({"msg": "Invalid identity"}), 401
 
-        user = mongo.db.users.find_one({"email": email})
+        user = users.find_one({"email": email})
         if not user:
             return jsonify({"msg": "User not found"}), 404
 
-        total_resumes = mongo.db.resumes.count_documents({"email": email})
-        total_applications = mongo.db.applications.count_documents({"email": email})
-        profile_completion = user.get("profileCompletion", 70)
-        last_updated = user.get("lastUpdated", datetime.utcnow().isoformat())
+        # Safely get values with defaults
+        total_resumes = resumes.count_documents({"email": email})
+        total_applications = applications.count_documents({"email": email}) if "applications" in db.list_collection_names() else 0
+        profile_completion = user.get("profileCompletion", 0)
+        last_updated = user.get("lastUpdated", datetime.utcnow()).isoformat()
 
-        # Recent activity handling
-        activities_cursor = mongo.db.activities.find({"email": email}).sort("date", -1).limit(5)
-        activities = []
-        for activity in activities_cursor:
-            activities.append({
-                "id": str(activity.get("_id", "")),
-                "type": activity.get("type", "profile_update"),
-                "description": activity.get("description", "No description available"),
-                "date": activity.get("date", datetime.utcnow()).isoformat()
+        # Get recent activity
+        activity_cursor = activities.find({"email": email}).sort("date", -1).limit(5) if "activities" in db.list_collection_names() else []
+        activity_list = []
+        for act in activity_cursor:
+            activity_list.append({
+                "id": str(act.get("_id", "")),
+                "type": act.get("type", "profile_update"),
+                "description": act.get("description", ""),
+                "date": act.get("date", datetime.utcnow()).isoformat()
             })
 
         return jsonify({
@@ -447,11 +448,11 @@ def get_dashboard_data():
                 "profileCompletion": profile_completion,
                 "lastUpdated": last_updated
             },
-            "recentActivity": activities
+            "recentActivity": activity_list
         }), 200
 
     except Exception as e:
-        print("DASHBOARD ERROR:", str(e))
+        print("[DASHBOARD ERROR]", e)
         return jsonify({"error": "Internal Server Error", "details": str(e)}), 500
 
 @app.route("/resume/<resume_id>", methods=["GET"])
