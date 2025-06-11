@@ -9,8 +9,6 @@ from bson.objectid import ObjectId
 from werkzeug.utils import secure_filename
 from email.message import EmailMessage
 from datetime import datetime, timedelta
-from dashboard import dashboard_bp
-
 
 import fitz  # PyMuPDF
 import os
@@ -40,7 +38,7 @@ db = client["job_scraping_db"]
 resumes = db["resumes"]
 users = db["users"]
 pending_verifications = db["pending_verifications"]
-app.db = db
+
 
 ALLOWED_USERS = {
     "22wh1a1215@bvrithyderabad.edu.in",
@@ -414,69 +412,27 @@ Total Experience: {total_years} years
     except Exception as e:
         traceback.print_exc()
         return jsonify({"msg": f"Internal Server Error: {str(e)}"}), 500
+        
+@app.route('/dashboard', methods=['GET'])
+def dashboard():
+    email = request.args.get('email')
+    if not email:
+        return jsonify({"error": "Email is required"}), 400
 
-@dashboard_bp.route('/dashboard', methods=['GET'])
-@jwt_required()
-def get_dashboard():
-    db = app.db
-    user_id = get_jwt_identity()
+    user_data = users.find_one({'email': email})
+    resume_data = resumes.find_one({'email': email})
 
-    try:
-        # Convert to ObjectId if needed
-        if not isinstance(user_id, ObjectId):
-            user_id = ObjectId(user_id)
+    if not user_data:
+        return jsonify({"error": "User not found"}), 404
 
-        users = db["users"]
-        resumes = db["resumes"]
-        applications = db["applications"]
+    profile_fields = ['fullname', 'education', 'skills', 'experience']
+    filled_fields = sum(1 for field in profile_fields if user_data.get(field))
+    completion_percent = int((filled_fields / len(profile_fields)) * 100)
 
-        user = users.find_one({"_id": user_id})
-        if not user:
-            return jsonify({"msg": "User not found"}), 404
-
-        total_resumes = resumes.count_documents({"user_id": str(user_id)})
-        total_applications = applications.count_documents({"user_id": str(user_id)})
-        profile_completion = 100 if user.get("profile_completed") else 0
-        last_updated = user.get("updatedAt", datetime.utcnow()).isoformat()
-
-        activity = []
-
-        if total_resumes > 0:
-            activity.append({
-                "id": "resume-update",
-                "type": "resume_update",
-                "description": "You updated your resume.",
-                "date": last_updated
-            })
-
-        if total_applications > 0:
-            activity.append({
-                "id": "application-1",
-                "type": "application",
-                "description": "You applied to a job.",
-                "date": last_updated
-            })
-
-        if profile_completion == 100:
-            activity.append({
-                "id": "profile-update",
-                "type": "profile_update",
-                "description": "Your profile is complete.",
-                "date": last_updated
-            })
-
-        return jsonify({
-            "stats": {
-                "totalResumes": total_resumes,
-                "totalApplications": total_applications,
-                "profileCompletion": profile_completion,
-                "lastUpdated": last_updated
-            },
-            "recentActivity": activity
-        }), 200
-
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    return jsonify({
+        "completion": completion_percent,
+        "resume": resume_data or {}
+    })
 
 @app.route("/resume/<resume_id>", methods=["GET"])
 @jwt_required()
@@ -487,8 +443,6 @@ def get_resume_by_id(resume_id):
         return jsonify({"msg": "Resume not found or access denied"}), 404
     resume["_id"] = str(resume["_id"])
     return jsonify(resume), 200
-
-app.register_blueprint(dashboard_bp)
 
 
 if __name__ == "__main__":
