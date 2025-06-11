@@ -9,7 +9,8 @@ from bson.objectid import ObjectId
 from werkzeug.utils import secure_filename
 from email.message import EmailMessage
 from datetime import datetime, timedelta
-from routes.dashboard import dashboard_bp  # adjust if it's in a different folder
+from dashboard import dashboard_bp
+
 
 import fitz  # PyMuPDF
 import os
