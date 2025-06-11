@@ -9,6 +9,8 @@ from bson.objectid import ObjectId
 from werkzeug.utils import secure_filename
 from email.message import EmailMessage
 from datetime import datetime, timedelta
+from routes.dashboard import dashboard_bp  # adjust if it's in a different folder
+
 import fitz  # PyMuPDF
 import os
 import smtplib
@@ -18,6 +20,7 @@ import re
 
 app = Flask(__name__)  # Fixed typo
 bcrypt = Bcrypt(app)
+
 
 CORS(app, origins=[
     "https://resumefrontend-rif3.onrender.com",
@@ -36,6 +39,7 @@ db = client["job_scraping_db"]
 resumes = db["resumes"]
 users = db["users"]
 pending_verifications = db["pending_verifications"]
+app.db = db
 
 ALLOWED_USERS = {
     "22wh1a1215@bvrithyderabad.edu.in",
@@ -410,35 +414,54 @@ Total Experience: {total_years} years
         traceback.print_exc()
         return jsonify({"msg": f"Internal Server Error: {str(e)}"}), 500
 
-@app.route('/dashboard', methods=['GET'])
+@dashboard_bp.route('/dashboard', methods=['GET'])
 @jwt_required()
-def dashboard():
+def get_dashboard():
+    db = app.db
+    user_id = get_jwt_identity()
+
     try:
-        email = get_jwt_identity()
-        print("Dashboard accessed by:", email)
+        # Convert to ObjectId if needed
+        if not isinstance(user_id, ObjectId):
+            user_id = ObjectId(user_id)
 
-        if not email:
-            return jsonify({"msg": "Invalid identity"}), 401
+        users = db["users"]
+        resumes = db["resumes"]
+        applications = db["applications"]
 
-        user = users.find_one({"email": email})
+        user = users.find_one({"_id": user_id})
         if not user:
             return jsonify({"msg": "User not found"}), 404
 
-        # Safely get values with defaults
-        total_resumes = resumes.count_documents({"email": email})
-        total_applications = applications.count_documents({"email": email}) if "applications" in db.list_collection_names() else 0
-        profile_completion = user.get("profileCompletion", 0)
-        last_updated = user.get("lastUpdated", datetime.utcnow()).isoformat()
+        total_resumes = resumes.count_documents({"user_id": str(user_id)})
+        total_applications = applications.count_documents({"user_id": str(user_id)})
+        profile_completion = 100 if user.get("profile_completed") else 0
+        last_updated = user.get("updatedAt", datetime.utcnow()).isoformat()
 
-        # Get recent activity
-        activity_cursor = activities.find({"email": email}).sort("date", -1).limit(5) if "activities" in db.list_collection_names() else []
-        activity_list = []
-        for act in activity_cursor:
-            activity_list.append({
-                "id": str(act.get("_id", "")),
-                "type": act.get("type", "profile_update"),
-                "description": act.get("description", ""),
-                "date": act.get("date", datetime.utcnow()).isoformat()
+        activity = []
+
+        if total_resumes > 0:
+            activity.append({
+                "id": "resume-update",
+                "type": "resume_update",
+                "description": "You updated your resume.",
+                "date": last_updated
+            })
+
+        if total_applications > 0:
+            activity.append({
+                "id": "application-1",
+                "type": "application",
+                "description": "You applied to a job.",
+                "date": last_updated
+            })
+
+        if profile_completion == 100:
+            activity.append({
+                "id": "profile-update",
+                "type": "profile_update",
+                "description": "Your profile is complete.",
+                "date": last_updated
             })
 
         return jsonify({
@@ -448,12 +471,11 @@ def dashboard():
                 "profileCompletion": profile_completion,
                 "lastUpdated": last_updated
             },
-            "recentActivity": activity_list
+            "recentActivity": activity
         }), 200
 
     except Exception as e:
-        print("[DASHBOARD ERROR]", e)
-        return jsonify({"error": "Internal Server Error", "details": str(e)}), 500
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/resume/<resume_id>", methods=["GET"])
 @jwt_required()
@@ -464,6 +486,9 @@ def get_resume_by_id(resume_id):
         return jsonify({"msg": "Resume not found or access denied"}), 404
     resume["_id"] = str(resume["_id"])
     return jsonify(resume), 200
+
+app.register_blueprint(dashboard_bp)
+
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0")
