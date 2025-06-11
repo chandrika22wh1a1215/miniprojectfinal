@@ -410,5 +410,15 @@ Total Experience: {total_years} years
         traceback.print_exc()
         return jsonify({"msg": f"Internal Server Error: {str(e)}"}), 500
 
+@app.route("/resume/<resume_id>", methods=["GET"])
+@jwt_required()
+def get_resume_by_id(resume_id):
+    current_user_email = get_jwt_identity()
+    resume = resumes.find_one({"_id": ObjectId(resume_id), "SubmittedBy": current_user_email})
+    if not resume:
+        return jsonify({"msg": "Resume not found or access denied"}), 404
+    resume["_id"] = str(resume["_id"])
+    return jsonify(resume), 200
+
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0")
