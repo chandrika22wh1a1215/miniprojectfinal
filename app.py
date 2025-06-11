@@ -412,27 +412,52 @@ Total Experience: {total_years} years
     except Exception as e:
         traceback.print_exc()
         return jsonify({"msg": f"Internal Server Error: {str(e)}"}), 500
-        
+
 @app.route('/dashboard', methods=['GET'])
+@jwt_required()
 def dashboard():
-    email = request.args.get('email')
-    if not email:
-        return jsonify({"error": "Email is required"}), 400
+    try:
+        email = get_jwt_identity()
+        print("Dashboard accessed by:", email)
 
-    user_data = users.find_one({'email': email})
-    resume_data = resumes.find_one({'email': email})
+        if not email:
+            return jsonify({"msg": "Invalid identity"}), 401
 
-    if not user_data:
-        return jsonify({"error": "User not found"}), 404
+        user = users.find_one({"email": email})
+        if not user:
+            return jsonify({"msg": "User not found"}), 404
 
-    profile_fields = ['fullname', 'education', 'skills', 'experience']
-    filled_fields = sum(1 for field in profile_fields if user_data.get(field))
-    completion_percent = int((filled_fields / len(profile_fields)) * 100)
+        # Safely get values with defaults
+        total_resumes = resumes.count_documents({"email": email})
+        total_applications = applications.count_documents({"email": email}) if "applications" in db.list_collection_names() else 0
+        profile_completion = user.get("profileCompletion", 0)
+        last_updated = user.get("lastUpdated", datetime.utcnow()).isoformat()
 
-    return jsonify({
-        "completion": completion_percent,
-        "resume": resume_data or {}
-    })
+        # Get recent activity
+        activity_cursor = activities.find({"email": email}).sort("date", -1).limit(5) if "activities" in db.list_collection_names() else []
+        activity_list = []
+        for act in activity_cursor:
+            activity_list.append({
+                "id": str(act.get("_id", "")),
+                "type": act.get("type", "profile_update"),
+                "description": act.get("description", ""),
+                "date": act.get("date", datetime.utcnow()).isoformat()
+            })
+
+        return jsonify({
+            "stats": {
+                "totalResumes": total_resumes,
+                "totalApplications": total_applications,
+                "profileCompletion": profile_completion,
+                "lastUpdated": last_updated
+            },
+            "recentActivity": activity_list
+        }), 200
+
+    except Exception as e:
+        print("[DASHBOARD ERROR]", e)
+        return jsonify({"error": "Internal Server Error", "details": str(e)}), 500
+
 
 @app.route("/resume/<resume_id>", methods=["GET"])
 @jwt_required()
