@@ -413,38 +413,46 @@ Total Experience: {total_years} years
 @app.route('/dashboard', methods=['GET'])
 @jwt_required()
 def get_dashboard_data():
-    email = get_jwt_identity()
+    try:
+        email = get_jwt_identity()
+        print("Dashboard access by:", email)
 
-    user = mongo.db.users.find_one({"email": email})
-    if not user:
-        return jsonify({"msg": "User not found"}), 404
+        if not email:
+            return jsonify({"msg": "Missing or invalid token identity"}), 401
 
-    total_resumes = mongo.db.resumes.count_documents({"email": email})
-    total_applications = mongo.db.applications.count_documents({"email": email})
+        user = mongo.db.users.find_one({"email": email})
+        if not user:
+            return jsonify({"msg": "User not found"}), 404
 
-    profile_completion = user.get("profileCompletion", 70)  # Use default or calculate
-    last_updated = user.get("lastUpdated", datetime.utcnow().isoformat())
+        total_resumes = mongo.db.resumes.count_documents({"email": email})
+        total_applications = mongo.db.applications.count_documents({"email": email})
+        profile_completion = user.get("profileCompletion", 70)
+        last_updated = user.get("lastUpdated", datetime.utcnow().isoformat())
 
-    activities_cursor = mongo.db.activities.find({"email": email}).sort("date", -1).limit(5)
-    activities = [
-        {
-            "id": str(activity["_id"]),
-            "type": activity["type"],
-            "description": activity["description"],
-            "date": activity["date"]
-        }
-        for activity in activities_cursor
-    ]
+        # Recent activity handling
+        activities_cursor = mongo.db.activities.find({"email": email}).sort("date", -1).limit(5)
+        activities = []
+        for activity in activities_cursor:
+            activities.append({
+                "id": str(activity.get("_id", "")),
+                "type": activity.get("type", "profile_update"),
+                "description": activity.get("description", "No description available"),
+                "date": activity.get("date", datetime.utcnow()).isoformat()
+            })
 
-    return jsonify({
-        "stats": {
-            "totalResumes": total_resumes,
-            "totalApplications": total_applications,
-            "profileCompletion": profile_completion,
-            "lastUpdated": last_updated
-        },
-        "recentActivity": activities
-    }), 200
+        return jsonify({
+            "stats": {
+                "totalResumes": total_resumes,
+                "totalApplications": total_applications,
+                "profileCompletion": profile_completion,
+                "lastUpdated": last_updated
+            },
+            "recentActivity": activities
+        }), 200
+
+    except Exception as e:
+        print("DASHBOARD ERROR:", str(e))
+        return jsonify({"error": "Internal Server Error", "details": str(e)}), 500
 
 @app.route("/resume/<resume_id>", methods=["GET"])
 @jwt_required()
