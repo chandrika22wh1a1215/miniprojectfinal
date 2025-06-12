@@ -32,6 +32,7 @@ CORS(app, origins=[
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024
 app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY", "your-secret-key")
 app.config["JWT_ACCESS_TOKEN_EXPIRES"] = False
+app.config["MONGO_URI"] = "mongodb+srv://22wh1a1215:Resume@cluster0.fu4wtmw.mongodb.net/job_scraping_db?retryWrites=true&w=majority"
 
 jwt = JWTManager(app)
 
