@@ -337,9 +337,6 @@ def add_manual_resume():
         data = request.json
         email = get_jwt_identity()
 
-        # Check if profile exists
-        existing_profile = resumes.find_one({"SubmittedBy": email})
-        
         name = data.get("fullName", "").strip()
         phone = data.get("phoneNumber", "").strip()
 
@@ -411,64 +408,16 @@ Total Experience: {total_years} years
             "Summary": summary,
             "TotalYearsOverall": total_years,
             "ResumeText": resume_text,
-            "SubmittedBy": email,
-            "LastUpdated": datetime.utcnow()
+            "SubmittedBy": email
         }
 
-        # Improved profile completion calculation
-        sections = {
-            "personalInfo": {
-                "weight": 20,
-                "isComplete": bool(name and email and phone)
-            },
-            "skills": {
-                "weight": 15,
-                "isComplete": bool(technical_skills or soft_skills)
-            },
-            "education": {
-                "weight": 15,
-                "isComplete": bool(education and any(
-                    all(e.get(field) for field in ["Degree", "Institution", "Year"])
-                    for e in education
-                ))
-            },
-            "experience": {
-                "weight": 15,
-                "isComplete": bool(experience and any(
-                    all(e.get(field) for field in ["Title", "Company", "Duration"])
-                    for e in experience
-                ))
-            },
-            "projects": {
-                "weight": 10,
-                "isComplete": bool(projects and any(
-                    all(p.get(field) for field in ["Name", "Description"])
-                    for p in projects
-                ))
-            },
-            "certifications": {
-                "weight": 10,
-                "isComplete": bool(certifications and any(
-                    all(c.get(field) for field in ["Name", "Issuer", "Year"])
-                    for c in certifications
-                ))
-            },
-            "links": {
-                "weight": 5,
-                "isComplete": bool(links)
-            },
-            "summary": {
-                "weight": 10,
-                "isComplete": bool(summary and summary.strip())
-            }
-        }
-
-        total_weight = sum(section["weight"] for section in sections.values())
-        completed_weight = sum(
-            section["weight"] for section in sections.values()
-            if section["isComplete"]
-        )
-        profile_completion = int((completed_weight / total_weight) * 100)
+        # Calculate profile completion
+        fields_filled = sum(bool(data.get(key)) for key in [
+            "fullName", "email", "phoneNumber", "SoftSkills", "TechnicalSkills",
+            "Education", "Experience", "Certifications", "Projects", "Links", "Summary", "TotalYearsOverall"
+        ])
+        total_fields = 12
+        profile_completion = int((fields_filled / total_fields) * 100)
 
         # Update or insert resume
         resumes.update_one(
@@ -477,38 +426,18 @@ Total Experience: {total_years} years
             upsert=True
         )
 
-        # Update user collection with detailed completion info
+        # Update user collection
         users.update_one(
             {"email": email},
             {"$set": {
                 "profileCompletion": profile_completion,
-                "lastUpdated": datetime.utcnow(),
-                "sectionCompletion": {
-                    section: info["isComplete"]
-                    for section, info in sections.items()
-                }
+                "lastUpdated": datetime.utcnow()
             }}
         )
 
-        # Add activity log with more details
-        activities.insert_one({
-            "email": email,
-            "type": "profile_update",
-            "description": f"Profile {'updated' if existing_profile else 'created'} with {profile_completion}% completion",
-            "date": datetime.utcnow(),
-            "sectionsUpdated": [
-                section for section, info in sections.items()
-                if info["isComplete"]
-            ]
-        })
-
         return jsonify({
             "msg": "Profile saved or updated",
-            "profileCompletion": profile_completion,
-            "sectionCompletion": {
-                section: info["isComplete"]
-                for section, info in sections.items()
-            }
+            "profileCompletion": profile_completion
         }), 200
 
     except Exception as e:
@@ -548,11 +477,10 @@ def dashboard():
             return jsonify({"msg": "User not found"}), 404
 
         # Safely get values with defaults
-        total_resumes = resumes.count_documents({"SubmittedBy": email})  # Changed from "email" to "SubmittedBy"
+        total_resumes = resumes.count_documents({"email": email})
         total_applications = applications.count_documents({"email": email}) if "applications" in db.list_collection_names() else 0
         profile_completion = user.get("profileCompletion", 0)
         last_updated = user.get("lastUpdated", datetime.utcnow()).isoformat()
-        section_completion = user.get("sectionCompletion", {})
 
         # Get recent activity
         activity_cursor = activities.find({"email": email}).sort("date", -1).limit(5) if "activities" in db.list_collection_names() else []
@@ -562,8 +490,7 @@ def dashboard():
                 "id": str(act.get("_id", "")),
                 "type": act.get("type", "profile_update"),
                 "description": act.get("description", ""),
-                "date": act.get("date", datetime.utcnow()).isoformat(),
-                "sectionsUpdated": act.get("sectionsUpdated", [])
+                "date": act.get("date", datetime.utcnow()).isoformat()
             })
 
         return jsonify({
@@ -571,8 +498,7 @@ def dashboard():
                 "totalResumes": total_resumes,
                 "totalApplications": total_applications,
                 "profileCompletion": profile_completion,
-                "lastUpdated": last_updated,
-                "sectionCompletion": section_completion
+                "lastUpdated": last_updated
             },
             "recentActivity": activity_list
         }), 200
@@ -580,6 +506,7 @@ def dashboard():
     except Exception as e:
         print("[DASHBOARD ERROR]", e)
         return jsonify({"error": "Internal Server Error", "details": str(e)}), 500
+
 
 
 @app.route("/resume/<resume_id>", methods=["GET"])
