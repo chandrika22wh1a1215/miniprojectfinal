@@ -9,6 +9,7 @@ from bson.objectid import ObjectId
 from werkzeug.utils import secure_filename
 from email.message import EmailMessage
 from datetime import datetime, timedelta
+from flask_pymongo import PyMongo
 
 import fitz  # PyMuPDF
 import os
@@ -16,6 +17,8 @@ import smtplib
 import random
 import string
 import re
+import traceback
+
 
 app = Flask(__name__)  # Fixed typo
 bcrypt = Bcrypt(app)
@@ -38,6 +41,7 @@ db = client["job_scraping_db"]
 resumes = db["resumes"]
 users = db["users"]
 pending_verifications = db["pending_verifications"]
+mongo = PyMongo(app)
 
 
 ALLOWED_USERS = {
@@ -332,6 +336,9 @@ def add_manual_resume():
         data = request.json
         email = get_jwt_identity()
 
+        # Check if profile exists
+        existing_profile = resumes.find_one({"SubmittedBy": email})
+        
         name = data.get("fullName", "").strip()
         phone = data.get("phoneNumber", "").strip()
 
@@ -403,16 +410,64 @@ Total Experience: {total_years} years
             "Summary": summary,
             "TotalYearsOverall": total_years,
             "ResumeText": resume_text,
-            "SubmittedBy": email
+            "SubmittedBy": email,
+            "LastUpdated": datetime.utcnow()
         }
 
-        # Calculate profile completion
-        fields_filled = sum(bool(data.get(key)) for key in [
-            "fullName", "email", "phoneNumber", "SoftSkills", "TechnicalSkills",
-            "Education", "Experience", "Certifications", "Projects", "Links", "Summary", "TotalYearsOverall"
-        ])
-        total_fields = 12
-        profile_completion = int((fields_filled / total_fields) * 100)
+        # Improved profile completion calculation
+        sections = {
+            "personalInfo": {
+                "weight": 20,
+                "isComplete": bool(name and email and phone)
+            },
+            "skills": {
+                "weight": 15,
+                "isComplete": bool(technical_skills or soft_skills)
+            },
+            "education": {
+                "weight": 15,
+                "isComplete": bool(education and any(
+                    all(e.get(field) for field in ["Degree", "Institution", "Year"])
+                    for e in education
+                ))
+            },
+            "experience": {
+                "weight": 15,
+                "isComplete": bool(experience and any(
+                    all(e.get(field) for field in ["Title", "Company", "Duration"])
+                    for e in experience
+                ))
+            },
+            "projects": {
+                "weight": 10,
+                "isComplete": bool(projects and any(
+                    all(p.get(field) for field in ["Name", "Description"])
+                    for p in projects
+                ))
+            },
+            "certifications": {
+                "weight": 10,
+                "isComplete": bool(certifications and any(
+                    all(c.get(field) for field in ["Name", "Issuer", "Year"])
+                    for c in certifications
+                ))
+            },
+            "links": {
+                "weight": 5,
+                "isComplete": bool(links)
+            },
+            "summary": {
+                "weight": 10,
+                "isComplete": bool(summary and summary.strip())
+            }
+        }
+
+        total_weight = sum(section["weight"] for section in sections.values())
+        completed_weight = sum(
+            section["weight"] for section in sections.values()
+            if section["isComplete"]
+        )
+        profile_completion = int((completed_weight / total_weight) * 100)
 
         # Update or insert resume
         resumes.update_one(
@@ -421,18 +476,38 @@ Total Experience: {total_years} years
             upsert=True
         )
 
-        # Update user collection
+        # Update user collection with detailed completion info
         users.update_one(
             {"email": email},
             {"$set": {
                 "profileCompletion": profile_completion,
-                "lastUpdated": datetime.utcnow()
+                "lastUpdated": datetime.utcnow(),
+                "sectionCompletion": {
+                    section: info["isComplete"]
+                    for section, info in sections.items()
+                }
             }}
         )
 
+        # Add activity log with more details
+        activities.insert_one({
+            "email": email,
+            "type": "profile_update",
+            "description": f"Profile {'updated' if existing_profile else 'created'} with {profile_completion}% completion",
+            "date": datetime.utcnow(),
+            "sectionsUpdated": [
+                section for section, info in sections.items()
+                if info["isComplete"]
+            ]
+        })
+
         return jsonify({
             "msg": "Profile saved or updated",
-            "profileCompletion": profile_completion
+            "profileCompletion": profile_completion,
+            "sectionCompletion": {
+                section: info["isComplete"]
+                for section, info in sections.items()
+            }
         }), 200
 
     except Exception as e:
@@ -455,10 +530,11 @@ def dashboard():
             return jsonify({"msg": "User not found"}), 404
 
         # Safely get values with defaults
-        total_resumes = resumes.count_documents({"email": email})
+        total_resumes = resumes.count_documents({"SubmittedBy": email})  # Changed from "email" to "SubmittedBy"
         total_applications = applications.count_documents({"email": email}) if "applications" in db.list_collection_names() else 0
         profile_completion = user.get("profileCompletion", 0)
         last_updated = user.get("lastUpdated", datetime.utcnow()).isoformat()
+        section_completion = user.get("sectionCompletion", {})
 
         # Get recent activity
         activity_cursor = activities.find({"email": email}).sort("date", -1).limit(5) if "activities" in db.list_collection_names() else []
@@ -468,7 +544,8 @@ def dashboard():
                 "id": str(act.get("_id", "")),
                 "type": act.get("type", "profile_update"),
                 "description": act.get("description", ""),
-                "date": act.get("date", datetime.utcnow()).isoformat()
+                "date": act.get("date", datetime.utcnow()).isoformat(),
+                "sectionsUpdated": act.get("sectionsUpdated", [])
             })
 
         return jsonify({
@@ -476,7 +553,8 @@ def dashboard():
                 "totalResumes": total_resumes,
                 "totalApplications": total_applications,
                 "profileCompletion": profile_completion,
-                "lastUpdated": last_updated
+                "lastUpdated": last_updated,
+                "sectionCompletion": section_completion
             },
             "recentActivity": activity_list
         }), 200
@@ -496,6 +574,30 @@ def get_resume_by_id(resume_id):
     resume["_id"] = str(resume["_id"])
     return jsonify(resume), 200
 
+@app.route('/add-job', methods=['POST'])
+def add_job():
+    data = request.get_json()
+
+    required_fields = ['title', 'company', 'location', 'description', 'requirements', 'experienceRequired']
+    if not all(field in data for field in required_fields):
+        return jsonify({'error': 'Missing fields'}), 400
+
+    # Enforce data types
+    if not isinstance(data['title'], str):
+        return jsonify({'error': 'title must be a string'}), 400
+    if not isinstance(data['company'], str):
+        return jsonify({'error': 'company must be a string'}), 400
+    if not isinstance(data['location'], str):
+        return jsonify({'error': 'location must be a string'}), 400
+    if not isinstance(data['description'], str):
+        return jsonify({'error': 'description must be a string'}), 400
+    if not isinstance(data['requirements'], list) or not all(isinstance(r, str) for r in data['requirements']):
+        return jsonify({'error': 'requirements must be a list of strings'}), 400
+    if not isinstance(data['experienceRequired'], int):
+        return jsonify({'error': 'experienceRequired must be an integer'}), 400
+
+    mongo.db.job_posts.insert_one(data)
+    return jsonify({'message': 'Job added successfully'}), 201
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0")
