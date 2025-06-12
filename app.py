@@ -330,9 +330,9 @@ def update_resume(id):
 def add_manual_resume():
     try:
         data = request.json
+        email = get_jwt_identity()
 
         name = data.get("fullName", "").strip()
-        email = data.get("email", "").strip()
         phone = data.get("phoneNumber", "").strip()
 
         if not name or any(char.isdigit() for char in name):
@@ -403,15 +403,42 @@ Total Experience: {total_years} years
             "Summary": summary,
             "TotalYearsOverall": total_years,
             "ResumeText": resume_text,
-            "SubmittedBy": get_jwt_identity()
+            "SubmittedBy": email
         }
 
-        result = resumes.insert_one(resume)
-        return jsonify({"msg": "Profile saved", "id": str(result.inserted_id)}), 201
+        # Calculate profile completion
+        fields_filled = sum(bool(data.get(key)) for key in [
+            "fullName", "email", "phoneNumber", "SoftSkills", "TechnicalSkills",
+            "Education", "Experience", "Certifications", "Projects", "Links", "Summary", "TotalYearsOverall"
+        ])
+        total_fields = 12
+        profile_completion = int((fields_filled / total_fields) * 100)
+
+        # Update or insert resume
+        resumes.update_one(
+            {"SubmittedBy": email},
+            {"$set": resume},
+            upsert=True
+        )
+
+        # Update user collection
+        users.update_one(
+            {"email": email},
+            {"$set": {
+                "profileCompletion": profile_completion,
+                "lastUpdated": datetime.utcnow()
+            }}
+        )
+
+        return jsonify({
+            "msg": "Profile saved or updated",
+            "profileCompletion": profile_completion
+        }), 200
 
     except Exception as e:
         traceback.print_exc()
         return jsonify({"msg": f"Internal Server Error: {str(e)}"}), 500
+
 
 @app.route('/dashboard', methods=['GET'])
 @jwt_required()
