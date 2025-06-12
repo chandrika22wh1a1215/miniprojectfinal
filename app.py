@@ -515,6 +515,23 @@ Total Experience: {total_years} years
         traceback.print_exc()
         return jsonify({"msg": f"Internal Server Error: {str(e)}"}), 500
 
+@app.route("/profile", methods=["GET"])
+@jwt_required()
+def get_profile():
+    try:
+        email = get_jwt_identity()
+        user = users.find_one({"email": email}, {"_id": 0})  # Don't return _id
+
+        if not user:
+            return jsonify({"msg": "User not found"}), 404
+
+        return jsonify(user), 200
+
+    except Exception as e:
+        print("[GET PROFILE ERROR]", e)
+        return jsonify({"error": "Internal Server Error", "details": str(e)}), 500
+
+
 
 @app.route('/dashboard', methods=['GET'])
 @jwt_required()
