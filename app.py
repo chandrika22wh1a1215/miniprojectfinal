@@ -600,5 +600,11 @@ def add_job():
     mongo.db.job_posts.insert_one(data)
     return jsonify({'message': 'Job added successfully'}), 201
 
+@app.route('/jobs', methods=['GET'])
+def get_all_jobs():
+    jobs = list(mongo.db.job_posts.find({}, {'_id': 0}))  # remove MongoDB's _id field
+    return jsonify(jobs), 200
+
+
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0")
