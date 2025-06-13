@@ -7,14 +7,9 @@ from werkzeug.utils import secure_filename
 import io
 from db import db
 
-
-# Import db from your main app
-from app import db
-
-
+ml_temp_resume_bp = Blueprint('ml_temp_resume_bp', __name__)
 ml_temp_resumes = db["ml_temp_resumes"]
 
-ml_temp_resume_bp = Blueprint('ml_temp_resume_bp', __name__)
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() == 'pdf'
