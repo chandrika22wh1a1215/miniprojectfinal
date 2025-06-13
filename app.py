@@ -4,15 +4,10 @@ from flask_bcrypt import Bcrypt
 from flask_jwt_extended import (
     JWTManager, create_access_token, jwt_required, get_jwt_identity
 )
-from pymongo import MongoClient
 from bson.objectid import ObjectId
 from werkzeug.utils import secure_filename
 from email.message import EmailMessage
 from datetime import datetime, timedelta
-from flask_pymongo import PyMongo
-from ml_temp_resume import ml_temp_resume_bp
-
-
 import fitz  # PyMuPDF
 import os
 import smtplib
@@ -21,10 +16,10 @@ import string
 import re
 import traceback
 
+from db import db  # <--- NEW LINE
 
-app = Flask(__name__)  # Fixed typo
+app = Flask(__name__)
 bcrypt = Bcrypt(app)
-
 
 CORS(app, origins=[
     "https://resumefrontend-rif3.onrender.com",
@@ -38,14 +33,9 @@ app.config["MONGO_URI"] = "mongodb+srv://22wh1a1215:Resume@cluster0.fu4wtmw.mong
 
 jwt = JWTManager(app)
 
-mongo_uri = "mongodb+srv://22wh1a1215:Resume@cluster0.fu4wtmw.mongodb.net/job_scraping_db?retryWrites=true&w=majority"
-client = MongoClient(mongo_uri)
-db = client["job_scraping_db"]
 resumes = db["resumes"]
 users = db["users"]
 pending_verifications = db["pending_verifications"]
-mongo = PyMongo(app)
-
 
 
 ALLOWED_USERS = {
