@@ -8,6 +8,8 @@ from bson.objectid import ObjectId
 from werkzeug.utils import secure_filename
 from email.message import EmailMessage
 from datetime import datetime, timedelta
+from ml_temp_resume import ml_temp_resume_bp
+
 import fitz  # PyMuPDF
 import os
 import smtplib
