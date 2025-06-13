@@ -10,6 +10,8 @@ from werkzeug.utils import secure_filename
 from email.message import EmailMessage
 from datetime import datetime, timedelta
 from flask_pymongo import PyMongo
+from ml_temp_resumes import ml_temp_resume_bp
+
 
 import fitz  # PyMuPDF
 import os
@@ -43,6 +45,7 @@ resumes = db["resumes"]
 users = db["users"]
 pending_verifications = db["pending_verifications"]
 mongo = PyMongo(app)
+
 
 
 ALLOWED_USERS = {
@@ -549,6 +552,7 @@ def get_all_jobs():
     jobs = list(mongo.db.job_posts.find({}, {'_id': 0}))  # remove MongoDB's _id field
     return jsonify(jobs), 200
 
+app.register_blueprint(ml_temp_resume_bp)
 
 if __name__ == "__main__":
     app.run(debug=True, host="0.0.0.0")
