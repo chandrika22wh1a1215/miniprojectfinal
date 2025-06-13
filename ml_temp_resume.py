@@ -5,6 +5,8 @@ from bson.binary import Binary
 from datetime import datetime
 from werkzeug.utils import secure_filename
 import io
+from db import db
+
 
 # Import db from your main app
 from app import db
