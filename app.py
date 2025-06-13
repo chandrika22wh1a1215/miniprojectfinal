@@ -10,7 +10,7 @@ from werkzeug.utils import secure_filename
 from email.message import EmailMessage
 from datetime import datetime, timedelta
 from flask_pymongo import PyMongo
-from ml_temp_resumes import ml_temp_resume_bp
+from ml_temp_resume import ml_temp_resume_bp
 
 
 import fitz  # PyMuPDF
