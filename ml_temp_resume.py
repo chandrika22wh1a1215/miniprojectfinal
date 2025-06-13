@@ -7,7 +7,8 @@ from werkzeug.utils import secure_filename
 import io
 
 # Import db from your main app
-from paste import db
+from app import db
+
 
 ml_temp_resumes = db["ml_temp_resumes"]
 
