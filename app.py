@@ -38,6 +38,8 @@ jwt = JWTManager(app)
 resumes = db["resumes"]
 users = db["users"]
 pending_verifications = db["pending_verifications"]
+job_posts = db["job_posts"]  # <--- ADD THIS LINE
+applications = db["applications"]
 
 
 ALLOWED_USERS = {
