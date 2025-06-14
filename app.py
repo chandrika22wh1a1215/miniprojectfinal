@@ -39,7 +39,6 @@ resumes = db["resumes"]
 users = db["users"]
 pending_verifications = db["pending_verifications"]
 job_posts = db["job_posts"]  # <--- ADD THIS LINE
-applications = db["applications"]
 
 
 ALLOWED_USERS = {
@@ -538,13 +537,25 @@ def add_job():
     if not isinstance(data['experienceRequired'], int):
         return jsonify({'error': 'experienceRequired must be an integer'}), 400
 
-    mongo.db.job_posts.insert_one(data)
-    return jsonify({'message': 'Job added successfully'}), 201
+    job = {
+        "title": data['title'],
+        "company": data['company'],
+        "location": data['location'],
+        "description": data['description'],
+        "requirements": data['requirements'],
+        "experienceRequired": data['experienceRequired'],
+        "created_at": datetime.utcnow()
+    }
+    job_posts.insert_one(job)
+    return jsonify({'msg': 'Job added successfully!'}), 201
 
+    
 @app.route('/jobs', methods=['GET'])
 def get_all_jobs():
-    jobs = list(mongo.db.job_posts.find({}, {'_id': 0}))  # remove MongoDB's _id field
+    jobs = list(job_posts.find({}, {'_id': 0}))
     return jsonify(jobs), 200
+
+
 
 app.register_blueprint(ml_temp_resume_bp)
 
