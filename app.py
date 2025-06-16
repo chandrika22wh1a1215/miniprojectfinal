@@ -39,7 +39,7 @@ resumes = db["resumes"]
 users = db["users"]
 pending_verifications = db["pending_verifications"]
 job_posts = db["job_posts"]  # <--- ADD THIS LINE
-
+notifications = db["notifications"]
 
 ALLOWED_USERS = {
     "22wh1a1215@bvrithyderabad.edu.in",
@@ -555,6 +555,38 @@ def get_all_jobs():
     jobs = list(job_posts.find({}, {'_id': 0}))
     return jsonify(jobs), 200
 
+def add_notification(user_email, message, notification_type="info"):
+    notification = {
+        "user_email": user_email,
+        "message": message,
+        "type": notification_type,
+        "created_at": datetime.utcnow(),
+        "is_read": False
+    }
+    notifications.insert_one(notification)
+
+
+@app.route('/notifications', methods=['GET'])
+@jwt_required()
+def get_notifications():
+    user_email = get_jwt_identity()
+    user_notifications = list(notifications.find(
+        {"user_email": user_email},
+        {"_id": 0, "user_email": 0}
+    ).sort("created_at", -1).limit(20))
+    return jsonify(user_notifications), 200
+
+@app.route('/notifications/mark-read', methods=['POST'])
+@jwt_required()
+def mark_notifications_read():
+    user_email = get_jwt_identity()
+    data = request.json
+    notification_ids = data.get('notification_ids', [])
+    notifications.update_many(
+        {"_id": {"$in": [ObjectId(id) for id in notification_ids]}},
+        {"$set": {"is_read": True}}
+    )
+    return jsonify({"msg": "Notifications marked as read"}), 200
 
 
 app.register_blueprint(ml_temp_resume_bp)
