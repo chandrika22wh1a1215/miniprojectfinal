@@ -558,22 +558,22 @@ def get_all_jobs():
 def add_notification(user_email, message, notification_type="info"):
     notification = {
         "user_email": user_email,
-        "message": message,
-        "type": notification_type,
+        "message": message,                # e.g., "Resume generated" or "Resume rejected"
+        "type": notification_type,         # e.g., "generate" or "reject"
         "created_at": datetime.utcnow(),
         "is_read": False
     }
     notifications.insert_one(notification)
-
-
+    
 @app.route('/notifications', methods=['GET'])
 @jwt_required()
 def get_notifications():
     user_email = get_jwt_identity()
+    # Fetch ALL notifications for the user, not just unread ones!
     user_notifications = list(notifications.find(
         {"user_email": user_email},
         {"_id": 0, "user_email": 0}
-    ).sort("created_at", -1).limit(20))
+    ).sort("created_at", -1).limit(50))  # Increase limit if you want
     return jsonify(user_notifications), 200
 
 @app.route('/notifications/mark-read', methods=['POST'])
@@ -583,7 +583,7 @@ def mark_notifications_read():
     data = request.json
     notification_ids = data.get('notification_ids', [])
     notifications.update_many(
-        {"_id": {"$in": [ObjectId(id) for id in notification_ids]}},
+        {"_id": {"$in": [ObjectId(id) for id in notification_ids]}, "user_email": user_email},
         {"$set": {"is_read": True}}
     )
     return jsonify({"msg": "Notifications marked as read"}), 200
