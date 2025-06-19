@@ -30,6 +30,7 @@ def ml_upload_resume():
     pdf_data = file.read()
     temp_resume = {
         "user_email": email,
+        "job_id": request.form.get("job_id"),
         "filename": secure_filename(file.filename),
         "pdf_data": Binary(pdf_data),
         "created_at": datetime.utcnow()
@@ -47,6 +48,19 @@ def get_temp_ml_resumes():
         r["_id"] = str(r["_id"])
         del r["pdf_data"]  # Don't send binary data in the list
     return jsonify(resumes_list), 200
+
+@ml_temp_resume_bp.route("/ml/job_resume/<job_id>", methods=["GET"])
+@jwt_required()
+def get_job_resume(job_id):
+    email = get_jwt_identity()
+    resume = ml_temp_resumes.find_one({"user_email": email, "job_id": job_id})
+    if not resume:
+        return jsonify({"msg": "Resume not found for this job"}), 404
+    return jsonify({
+        "resume_id": str(resume["_id"]),
+        "download_link": f"/ml/temp_resumes/{resume['_id']}/download"
+    }), 200
+
 
 # 3. Download/view a specific temporary ML resume
 @ml_temp_resume_bp.route("/ml/temp_resumes/<resume_id>/download", methods=["GET"])
