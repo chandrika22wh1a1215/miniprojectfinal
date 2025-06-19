@@ -561,6 +561,29 @@ def get_all_jobs():
     jobs = list(job_posts.find({}, {'_id': 0}))
     return jsonify(jobs), 200
 
+@app.route("/jobs/matches", methods=["GET"])
+@jwt_required()  # Remove this line if you want it to be public
+def get_job_matches():
+    # Get skills from query parameter (comma-separated)
+    skills_param = request.args.get("skills", "")
+    skills = [s.strip().lower() for s in skills_param.split(",") if s.strip()]
+    
+    # Example: Find jobs where at least one required_skill matches
+    # Adjust the field name according to your job_posts schema
+    if skills:
+        query = {"required_skills": {"$in": skills}}
+        matched_jobs = list(job_posts.find(query))
+    else:
+        matched_jobs = list(job_posts.find())
+
+    # Convert ObjectId to str for JSON serialization
+    for job in matched_jobs:
+        job["_id"] = str(job["_id"])
+        # Add any other field conversions if needed
+
+    return jsonify(matched_jobs), 200
+
+
 def add_notification(user_email, message, job_id=None, notification_type="info"):
     notification = {
         "user_email": user_email,
