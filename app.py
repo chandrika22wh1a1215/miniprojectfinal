@@ -23,10 +23,16 @@ from db import db  # <--- NEW LINE
 app = Flask(__name__)
 bcrypt = Bcrypt(app)
 
-CORS(app, origins=[
-    "https://resumefrontend-rif3.onrender.com",
-    "https://mini-project-eight-amber.vercel.app"
-])
+
+CORS(app,
+     origins=[
+         "https://resumefrontend-rif3.onrender.com",
+         "https://mini-project-eight-amber.vercel.app"
+     ],
+     supports_credentials=True,  # If you use cookies or JWT in headers
+     allow_headers="*",
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+)
 
 app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024
 app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET_KEY", "your-secret-key")
