@@ -556,34 +556,34 @@ def get_all_jobs():
     jobs = list(job_posts.find({}, {'_id': 0}))
     return jsonify(jobs), 200
 
-def add_notification(user_email, message, notification_type="info"):
+def add_notification(user_email, message, job_id=None, notification_type="info"):
     notification = {
         "user_email": user_email,
         "message": message,                # e.g., "Resume generated" or "Resume rejected"
         "type": notification_type,         # e.g., "generate" or "reject"
+        "job_id": ObjectId(job_id) if job_id else None,
         "created_at": datetime.utcnow(),
         "is_read": False
     }
     notifications.insert_one(notification)
-    
+
 @app.route('/notifications', methods=['GET'])
 @jwt_required()
 def get_notifications():
     try:
         user_email = get_jwt_identity()
         user_notifications = list(notifications.find({"user_email": user_email}).sort("created_at", -1))
-        
         # Convert ObjectId to string for JSON serialization
         for notification in user_notifications:
             notification["_id"] = str(notification["_id"])
+            if notification.get("job_id"):
+                notification["job_id"] = str(notification["job_id"])
             if "created_at" in notification:
                 notification["created_at"] = notification["created_at"].isoformat()
-        
         return jsonify(user_notifications), 200
     except Exception as e:
         print(f"[GET NOTIFICATIONS ERROR] {e}")
         return jsonify({"error": "Failed to fetch notifications"}), 500
-
 
 @app.route('/notifications/mark-read', methods=['POST'])
 @jwt_required()
@@ -591,62 +591,13 @@ def mark_notifications_read():
     user_email = get_jwt_identity()
     data = request.json
     notification_ids = data.get('notification_ids', [])
+    # Convert string IDs to ObjectId
+    obj_ids = [ObjectId(id) for id in notification_ids if ObjectId.is_valid(id)]
     notifications.update_many(
-        {"_id": {"$in": [ObjectId(id) for id in notification_ids]}, "user_email": user_email},
+        {"_id": {"$in": obj_ids}, "user_email": user_email},
         {"$set": {"is_read": True}}
     )
     return jsonify({"msg": "Notifications marked as read"}), 200
-
-@app.route('/jobs/<job_id>/accept', methods=['POST'])
-@jwt_required()
-def accept_job(job_id):
-    try:
-        user_email = get_jwt_identity()
-        
-        # Your job acceptance logic here
-        # For example, update a job application status to "accepted"
-        
-        # Add notification to the database
-        notifications.insert_one({
-            "user_email": user_email,
-            "job_id": job_id,
-            "message": "You have accepted a job offer.",
-            "type": "job",
-            "status": "accepted",
-            "is_read": False,
-            "created_at": datetime.utcnow()
-        })
-        
-        return jsonify({"msg": "Job accepted successfully"}), 200
-    except Exception as e:
-        print(f"[ACCEPT JOB ERROR] {e}")
-        return jsonify({"error": "Failed to accept job"}), 500
-
-@app.route('/jobs/<job_id>/reject', methods=['POST'])
-@jwt_required()
-def reject_job(job_id):
-    try:
-        user_email = get_jwt_identity()
-        
-        # Your job rejection logic here
-        # For example, update a job application status to "rejected"
-        
-        # Add notification to the database
-        notifications.insert_one({
-            "user_email": user_email,
-            "job_id": job_id,
-            "message": "You have rejected a job offer.",
-            "type": "job",
-            "status": "rejected",
-            "is_read": False,
-            "created_at": datetime.utcnow()
-        })
-        
-        return jsonify({"msg": "Job rejected successfully"}), 200
-    except Exception as e:
-        print(f"[REJECT JOB ERROR] {e}")
-        return jsonify({"error": "Failed to reject job"}), 500
-
 
 
 app.register_blueprint(ml_temp_resume_bp)
