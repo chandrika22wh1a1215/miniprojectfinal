@@ -14,7 +14,6 @@ job_posts = db["job_posts"]  # Make sure this is defined in your db setup
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() == 'pdf'
 
-# 1. Upload ML-generated PDF resume (shared across jobs)
 @ml_temp_resume_bp.route("/ml/upload_resume", methods=["POST"])
 @jwt_required()
 def ml_upload_resume():
@@ -28,7 +27,6 @@ def ml_upload_resume():
         return jsonify({"msg": "Invalid file type (only PDF allowed)"}), 400
 
     pdf_data = file.read()
-    # You may get a list of job_ids from the frontend if you want to share this resume across multiple jobs
     job_ids = request.form.getlist("job_ids")  # Expecting job_ids[] in form-data
 
     temp_resume = {
@@ -47,7 +45,15 @@ def ml_upload_resume():
             {"$set": {"resume_id": resume_id}}
         )
 
+    # ADD THIS: Create a notification for the user
+    add_notification(
+        user_email=email,
+        message="Your ML-generated resume was uploaded successfully.",
+        notification_type="success"
+    )
+
     return jsonify({"msg": "ML resume uploaded and linked to jobs", "resume_id": str(resume_id)}), 201
+
 
 # 2. Get download link for a job (jobs reference resume_id)
 @ml_temp_resume_bp.route("/ml/job_resume/<job_id>", methods=["GET"])
