@@ -6,7 +6,8 @@ from datetime import datetime
 from werkzeug.utils import secure_filename
 import io
 from db import db
-from app import add_notification
+from utils import add_notification
+
 
 
 ml_temp_resume_bp = Blueprint('ml_temp_resume_bp', __name__)
