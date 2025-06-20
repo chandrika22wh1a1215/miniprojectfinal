@@ -9,6 +9,7 @@ from werkzeug.utils import secure_filename
 from email.message import EmailMessage
 from datetime import datetime, timedelta
 from ml_temp_resume import ml_temp_resume_bp
+from app import add_notification
 
 import fitz  # PyMuPDF
 import os
@@ -17,6 +18,8 @@ import random
 import string
 import re
 import traceback
+import tempfile
+
 
 from db import db  # <--- NEW LINE
 
@@ -44,8 +47,11 @@ jwt = JWTManager(app)
 resumes = db["resumes"]
 users = db["users"]
 pending_verifications = db["pending_verifications"]
-job_posts = db["job_posts"]  # <--- ADD THIS LINE
+job_posts = db["job_posts"]
 notifications = db["notifications"]
+applications = db["applications"]
+activities = db["activities"]
+
 
 ALLOWED_USERS = {
     "22wh1a1215@bvrithyderabad.edu.in",
@@ -587,9 +593,9 @@ def get_job_matches():
 def add_notification(user_email, message, job_id=None, notification_type="info"):
     notification = {
         "user_email": user_email,
-        "message": message,                # e.g., "Resume generated" or "Resume rejected"
-        "type": notification_type,         # e.g., "generate" or "reject"
-        "job_id": ObjectId(job_id) if job_id else None,
+        "message": message,
+        "type": notification_type,
+        "job_id": job_id,
         "created_at": datetime.utcnow(),
         "is_read": False
     }
