@@ -56,7 +56,8 @@ activities = db["activities"]
 ALLOWED_USERS = {
     "22wh1a1215@bvrithyderabad.edu.in",
     "22wh1a1239@bvrithyderabad.edu.in",
-    "allisarmishta@gmail.com"
+    "allisarmishta@gmail.com",
+    "chandrikavedula@gmail.com"
 }
 
 login_attempts = {}
