@@ -576,7 +576,11 @@ def get_job_matches():
         user_resumes = list(db["ml_temp_resumes"].find({"user_email": email}, {"_id": 1}))
         valid_resume_ids = [resume["_id"] for resume in user_resumes]
 
+        print("User email:", email)
+        print("User resume IDs:", valid_resume_ids)
+
         if not valid_resume_ids:
+            print("No ML resumes found for user.")
             return jsonify([]), 200
 
         matched_jobs_cursor = db["job_posts"].find({
@@ -598,6 +602,7 @@ def get_job_matches():
             })
 
         print(f"Found {len(results)} matched jobs for user {email}")
+        print("Matched jobs:", results)
         return jsonify(results), 200
     except Exception as e:
         print(f"[GET JOB MATCHES ERROR] {e}")
