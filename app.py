@@ -9,7 +9,7 @@ from werkzeug.utils import secure_filename
 from email.message import EmailMessage
 from datetime import datetime, timedelta
 from ml_temp_resume import ml_temp_resume_bp
-
+from bson.objectid import ObjectId
 
 import fitz  # PyMuPDF
 import os
@@ -573,22 +573,20 @@ def get_all_jobs():
 def get_job_matches():
     email = get_jwt_identity()
     try:
-        # Step 1: Find all valid resume_ids for the current user from the temp collection.
-        user_resumes = ml_temp_resumes.find({"user_email": email}, {"_id": 1})
+        # Step 1: Get all ML temp resume ObjectIds for this user
+        user_resumes = list(ml_temp_resumes.find({"user_email": email}, {"_id": 1}))
         valid_resume_ids = [resume["_id"] for resume in user_resumes]
 
         if not valid_resume_ids:
-            # If the user has no temporary resumes, they can't have any matched jobs.
             return jsonify([]), 200
 
-        # Step 2: Find all jobs that are linked to one of those valid resume_ids.
+        # Step 2: Find jobs linked to those resume_ids
         matched_jobs_cursor = job_posts.find({
             "resume_id": {"$in": valid_resume_ids}
         })
-        
+
         results = []
         for job in matched_jobs_cursor:
-            # Manually build the response object to ensure all fields are present
             results.append({
                 "id": str(job["_id"]),
                 "title": job.get("title"),
@@ -597,7 +595,6 @@ def get_job_matches():
                 "description": job.get("description"),
                 "requiredSkills": job.get("requiredSkills", []),
                 "link": job.get("link"),
-                # Explicitly include resume_id and matchPercentage
                 "resume_id": str(job.get("resume_id")),
                 "matchPercentage": job.get("matchPercentage", 0)
             })
@@ -607,7 +604,6 @@ def get_job_matches():
     except Exception as e:
         print(f"[GET JOB MATCHES ERROR] {e}")
         return jsonify({"error": "Failed to fetch matched jobs"}), 500
-
 
 @app.route('/notifications', methods=['GET'])
 @jwt_required()
