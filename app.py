@@ -573,15 +573,13 @@ def get_all_jobs():
 def get_job_matches():
     email = get_jwt_identity()
     try:
-        # Step 1: Get all ML temp resume ObjectIds for this user
-        user_resumes = list(ml_temp_resumes.find({"user_email": email}, {"_id": 1}))
+        user_resumes = list(db["ml_temp_resumes"].find({"user_email": email}, {"_id": 1}))
         valid_resume_ids = [resume["_id"] for resume in user_resumes]
 
         if not valid_resume_ids:
             return jsonify([]), 200
 
-        # Step 2: Find jobs linked to those resume_ids
-        matched_jobs_cursor = job_posts.find({
+        matched_jobs_cursor = db["job_posts"].find({
             "resume_id": {"$in": valid_resume_ids}
         })
 
@@ -603,7 +601,10 @@ def get_job_matches():
         return jsonify(results), 200
     except Exception as e:
         print(f"[GET JOB MATCHES ERROR] {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": "Failed to fetch matched jobs"}), 500
+
 
 @app.route('/notifications', methods=['GET'])
 @jwt_required()
