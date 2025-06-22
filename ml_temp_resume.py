@@ -57,6 +57,17 @@ def ml_upload_resume():
 
     return jsonify({"msg": "ML resume uploaded and linked to jobs", "resume_id": str(resume_id)}), 201
 
+@ml_temp_resume_bp.route("/ml/temp_resumes", methods=["GET"])
+@jwt_required()
+def get_temp_resumes():
+    email = get_jwt_identity()
+    resumes = list(ml_temp_resumes.find({"user_email": email}))
+    for resume in resumes:
+        resume["_id"] = str(resume["_id"])
+        # You can add more fields here if needed
+    return jsonify(resumes), 200
+
+
 
 # 2. Get download link for a job (jobs reference resume_id)
 @ml_temp_resume_bp.route("/ml/job_resume/<job_id>", methods=["GET"])
