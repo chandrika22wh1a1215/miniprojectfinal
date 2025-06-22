@@ -568,27 +568,45 @@ def get_all_jobs():
     jobs = list(job_posts.find({}, {'_id': 0}))
     return jsonify(jobs), 200
 
-@app.route("/jobs/matches", methods=["GET"])
-@jwt_required()  # Remove this line if you want it to be public
+@app.route('/jobs/matches', methods=['GET'])
+@jwt_required()
 def get_job_matches():
-    # Get skills from query parameter (comma-separated)
-    skills_param = request.args.get("skills", "")
-    skills = [s.strip().lower() for s in skills_param.split(",") if s.strip()]
-    
-    # Example: Find jobs where at least one required_skill matches
-    # Adjust the field name according to your job_posts schema
-    if skills:
-        query = {"required_skills": {"$in": skills}}
-        matched_jobs = list(job_posts.find(query))
-    else:
-        matched_jobs = list(job_posts.find())
+    email = get_jwt_identity()
+    try:
+        # Step 1: Find all valid resume_ids for the current user from the temp collection.
+        user_resumes = ml_temp_resumes.find({"user_email": email}, {"_id": 1})
+        valid_resume_ids = [resume["_id"] for resume in user_resumes]
 
-    # Convert ObjectId to str for JSON serialization
-    for job in matched_jobs:
-        job["_id"] = str(job["_id"])
-        # Add any other field conversions if needed
+        if not valid_resume_ids:
+            # If the user has no temporary resumes, they can't have any matched jobs.
+            return jsonify([]), 200
 
-    return jsonify(matched_jobs), 200
+        # Step 2: Find all jobs that are linked to one of those valid resume_ids.
+        matched_jobs_cursor = job_posts.find({
+            "resume_id": {"$in": valid_resume_ids}
+        })
+        
+        results = []
+        for job in matched_jobs_cursor:
+            # Manually build the response object to ensure all fields are present
+            results.append({
+                "id": str(job["_id"]),
+                "title": job.get("title"),
+                "company": job.get("company"),
+                "location": job.get("location"),
+                "description": job.get("description"),
+                "requiredSkills": job.get("requiredSkills", []),
+                "link": job.get("link"),
+                # Explicitly include resume_id and matchPercentage
+                "resume_id": str(job.get("resume_id")),
+                "matchPercentage": job.get("matchPercentage", 0)
+            })
+
+        print(f"Found {len(results)} matched jobs for user {email}")
+        return jsonify(results), 200
+    except Exception as e:
+        print(f"[GET JOB MATCHES ERROR] {e}")
+        return jsonify({"error": "Failed to fetch matched jobs"}), 500
 
 
 @app.route('/notifications', methods=['GET'])
