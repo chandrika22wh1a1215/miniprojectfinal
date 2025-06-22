@@ -528,6 +528,10 @@ def get_resume_by_id(resume_id):
     resume["_id"] = str(resume["_id"])
     return jsonify(resume), 200
 
+from flask import request, jsonify
+from datetime import datetime
+from bson import ObjectId
+
 @app.route('/add-job', methods=['POST'])
 def add_job():
     data = request.get_json()
@@ -559,6 +563,14 @@ def add_job():
         "experienceRequired": data['experienceRequired'],
         "created_at": datetime.utcnow()
     }
+
+    # Handle resume_id if present
+    if "resume_id" in data and data["resume_id"]:
+        try:
+            job["resume_id"] = ObjectId(data["resume_id"])
+        except Exception:
+            return jsonify({'error': 'resume_id must be a valid ObjectId string'}), 400
+
     job_posts.insert_one(job)
     return jsonify({'msg': 'Job added successfully!'}), 201
 
