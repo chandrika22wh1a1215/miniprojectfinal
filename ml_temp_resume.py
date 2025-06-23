@@ -11,6 +11,10 @@ from flask import Blueprint
 
 ml_temp_resume_bp = Blueprint('ml_temp_resume', __name__)
 
+ml_temp_resumes = db["ml_temp_resumes"]
+job_posts = db["job_posts"]
+
+
 def allowed_file(filename):
     """Check if file has an allowed extension"""
     return '.' in filename and \
