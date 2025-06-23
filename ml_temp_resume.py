@@ -7,7 +7,9 @@ from werkzeug.utils import secure_filename
 import io
 from db import db
 from utils import add_notification
+from flask import Blueprint
 
+ml_temp_resume_bp = Blueprint('ml_temp_resume', __name__)
 
 @ml_temp_resume_bp.route("/ml/upload_resume", methods=["POST"])
 @jwt_required()
