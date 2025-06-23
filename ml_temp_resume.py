@@ -36,7 +36,8 @@ def ml_upload_resume():
         "user_email": email,
         "filename": secure_filename(file.filename),
         "pdf_data": Binary(pdf_data),
-        "created_at": datetime.utcnow()
+        "created_at": datetime.utcnow(),
+        "match_percentage": request.form.get("match_percentage")
     }
     result = ml_temp_resumes.insert_one(temp_resume)
     resume_id = result.inserted_id
