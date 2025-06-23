@@ -11,6 +11,11 @@ from flask import Blueprint
 
 ml_temp_resume_bp = Blueprint('ml_temp_resume', __name__)
 
+def allowed_file(filename):
+    """Check if file has an allowed extension"""
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in {'pdf'}
+
 @ml_temp_resume_bp.route("/ml/upload_resume", methods=["POST"])
 @jwt_required()
 def ml_upload_resume():
