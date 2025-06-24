@@ -20,6 +20,10 @@ def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in {'pdf'}
 
+from bson import ObjectId, Binary
+from werkzeug.utils import secure_filename
+from datetime import datetime
+
 @ml_temp_resume_bp.route("/ml/upload_resume", methods=["POST"])
 @jwt_required()
 def ml_upload_resume():
@@ -43,10 +47,9 @@ def ml_upload_resume():
         except ValueError:
             return jsonify({"msg": "Invalid match_percentage format"}), 400
     else:
-        # Handle case where match_percentage is not provided
-        # You can set a default (e.g., None or 0), or return an error
         match_percentage = None  # or 0, or return an error
 
+    # Save the resume
     temp_resume = {
         "user_email": email,
         "filename": secure_filename(file.filename),
@@ -57,21 +60,42 @@ def ml_upload_resume():
     result = ml_temp_resumes.insert_one(temp_resume)
     resume_id = result.inserted_id
 
-    # Update all referenced jobs to point to this resume
+    # Update or create job_matches entries for each job
     for job_id in job_ids:
-        job_posts.update_one(
-            {"_id": ObjectId(job_id)},
-            {"$set": {"resume_id": resume_id}}
+        # Upsert: update if exists, insert if not
+        job_matches.update_one(
+            {
+                "user_email": email,
+                "job_id": ObjectId(job_id)
+            },
+            {
+                "$set": {
+                    "resume_id": resume_id,
+                    "match_percentage": match_percentage,
+                    "created_at": datetime.utcnow()
+                }
+            },
+            upsert=True
         )
+
+    # (Optional) Update job_posts if you still want to track resume_id there
+    # for job_id in job_ids:
+    #     job_posts.update_one(
+    #         {"_id": ObjectId(job_id)},
+    #         {"$set": {"resume_id": resume_id}}
+    #     )
 
     # Create a notification for the user
     add_notification(
         user_email=email,
-        message="Your ML-generated resume was uploaded successfully.",
+        message="Your ML-generated resume was uploaded and matched to jobs successfully.",
         notification_type="success"
     )
 
-    return jsonify({"msg": "ML resume uploaded and linked to jobs", "resume_id": str(resume_id)}), 201
+    return jsonify({
+        "msg": "ML resume uploaded and matched to jobs",
+        "resume_id": str(resume_id)
+    }), 201
 
 
 
