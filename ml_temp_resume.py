@@ -20,9 +20,7 @@ def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in {'pdf'}
 
-from bson import ObjectId, Binary
-from werkzeug.utils import secure_filename
-from datetime import datetime
+
 
 @ml_temp_resume_bp.route("/ml/upload_resume", methods=["POST"])
 @jwt_required()
@@ -49,7 +47,6 @@ def ml_upload_resume():
     else:
         match_percentage = None  # or 0, or return an error
 
-    # Save the resume
     temp_resume = {
         "user_email": email,
         "filename": secure_filename(file.filename),
@@ -60,21 +57,15 @@ def ml_upload_resume():
     result = ml_temp_resumes.insert_one(temp_resume)
     resume_id = result.inserted_id
 
-    # Update or create job_matches entries for each job
+    # (Recommended) Update job_matches for each job
     for job_id in job_ids:
-        # Upsert: update if exists, insert if not
         job_matches.update_one(
-            {
-                "user_email": email,
-                "job_id": ObjectId(job_id)
-            },
-            {
-                "$set": {
-                    "resume_id": resume_id,
-                    "match_percentage": match_percentage,
-                    "created_at": datetime.utcnow()
-                }
-            },
+            {"user_email": email, "job_id": ObjectId(job_id)},
+            {"$set": {
+                "resume_id": resume_id,
+                "match_percentage": match_percentage,
+                "created_at": datetime.utcnow()
+            }},
             upsert=True
         )
 
@@ -88,15 +79,11 @@ def ml_upload_resume():
     # Create a notification for the user
     add_notification(
         user_email=email,
-        message="Your ML-generated resume was uploaded and matched to jobs successfully.",
+        message="Your ML-generated resume was uploaded successfully.",
         notification_type="success"
     )
 
-    return jsonify({
-        "msg": "ML resume uploaded and matched to jobs",
-        "resume_id": str(resume_id)
-    }), 201
-
+    return jsonify({"msg": "ML resume uploaded and linked to jobs", "resume_id": str(resume_id)}), 201
 
 
 @ml_temp_resume_bp.route("/ml/temp_resumes", methods=["GET"])
