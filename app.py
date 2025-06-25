@@ -528,10 +528,6 @@ def get_resume_by_id(resume_id):
     resume["_id"] = str(resume["_id"])
     return jsonify(resume), 200
 
-from flask import request, jsonify
-from datetime import datetime
-from bson import ObjectId
-
 @app.route('/add-job', methods=['POST'])
 def add_job():
     data = request.get_json()
@@ -564,7 +560,18 @@ def add_job():
         "created_at": datetime.utcnow()
     }
 
-    # Handle resume_id if present
+    # Optional: Add link if provided
+    if "link" in data and data["link"]:
+        job["link"] = data["link"]
+
+    # Optional: Add matchPercentage if provided
+    if "matchPercentage" in data and data["matchPercentage"] is not None:
+        try:
+            job["matchPercentage"] = float(data["matchPercentage"])
+        except ValueError:
+            return jsonify({'error': 'matchPercentage must be a number'}), 400
+
+    # Optional: Add resume_id if provided
     if "resume_id" in data and data["resume_id"]:
         try:
             job["resume_id"] = ObjectId(data["resume_id"])
@@ -573,6 +580,8 @@ def add_job():
 
     job_posts.insert_one(job)
     return jsonify({'msg': 'Job added successfully!'}), 201
+
+
 
     
 @app.route('/jobs', methods=['GET'])
