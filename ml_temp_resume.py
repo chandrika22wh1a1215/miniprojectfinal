@@ -69,12 +69,14 @@ def ml_upload_resume():
             upsert=True
         )
 
-    # (Optional) Update job_posts if you still want to track resume_id there
-    # for job_id in job_ids:
-    #     job_posts.update_one(
-    #         {"_id": ObjectId(job_id)},
-    #         {"$set": {"resume_id": resume_id}}
-    #     )
+    job_posts.update_one(
+    {"_id": ObjectId(job_id)},
+    {"$set": {
+        "resume_id": resume_id,
+        "matchPercentage": match_percentage,  # unique per job-resume pair
+        "link": "https://www.linkedin.com/jobs/view/123456789/"  # unique per job
+    }}
+)
 
     # Create a notification for the user
     add_notification(
