@@ -580,33 +580,44 @@ def get_all_jobs():
     jobs = list(job_posts.find({}, {'_id': 0}))
     return jsonify(jobs), 200
 
+
 @app.route('/jobs/matches', methods=['GET'])
 @jwt_required()
 def get_job_matches():
     email = get_jwt_identity()
     try:
-        matches = list(db["job_matches"].find({"user_email": email}))
-        job_ids = [match["job_id"] for match in matches]
-        jobs = list(db["job_posts"].find({"_id": {"$in": job_ids}}))
-        job_map = {str(job["_id"]): job for job in jobs}
+        user_resumes = list(db["ml_temp_resumes"].find({"user_email": email}, {"_id": 1}))
+        valid_resume_ids = [resume["_id"] for resume in user_resumes]
+
+        print("User email:", email)
+        print("User resume IDs:", valid_resume_ids)
+
+        if not valid_resume_ids:
+            print("No ML resumes found for user.")
+            return jsonify([]), 200
+
+        matched_jobs_cursor = db["job_posts"].find({
+            "resume_id": {"$in": valid_resume_ids}
+        })
 
         results = []
-        for match in matches:
-            job_id_str = str(match["job_id"])
-            job = job_map.get(job_id_str, {})
+        for job in matched_jobs_cursor:
             results.append({
-                "id": job_id_str,
+                "id": str(job["_id"]),
                 "title": job.get("title"),
                 "company": job.get("company"),
                 "location": job.get("location"),
                 "description": job.get("description"),
-                "requiredSkills": job.get("requirements", []),
+                "requiredSkills": job.get("requiredSkills", []),
                 "link": job.get("link"),
-                "resume_id": str(match["resume_id"]),
-                "matchPercentage": match.get("match_percentage", 0)
+                "resume_id": str(job.get("resume_id")),
+                "matchPercentage": job.get("matchPercentage", 0)
             })
 
+        print(f"Found {len(results)} matched jobs for user {email}")
+        print("Matched jobs:", results)
         return jsonify(results), 200
+
     except Exception as e:
         print(f"[GET JOB MATCHES ERROR] {e}")
         import traceback
