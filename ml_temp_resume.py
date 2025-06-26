@@ -57,7 +57,7 @@ def ml_upload_resume():
     result = ml_temp_resumes.insert_one(temp_resume)
     resume_id = result.inserted_id
 
-    # (Recommended) Update job_matches for each job
+    # Update job_matches for each job
     for job_id in job_ids:
         job_matches.update_one(
             {"user_email": email, "job_id": ObjectId(job_id)},
@@ -69,14 +69,12 @@ def ml_upload_resume():
             upsert=True
         )
 
-    job_posts.update_one(
-    {"_id": ObjectId(job_id)},
-    {"$set": {
-        "resume_id": resume_id,
-        "matchPercentage": match_percentage,  # unique per job-resume pair
-        "link": "https://www.linkedin.com/jobs/view/123456789/"  # unique per job
-    }}
-)
+    # Optional: Update job_posts if you want to track resume_id there
+    # for job_id in job_ids:
+    #     job_posts.update_one(
+    #         {"_id": ObjectId(job_id)},
+    #         {"$set": {"resume_id": resume_id}}
+    #     )
 
     # Create a notification for the user
     add_notification(
@@ -86,7 +84,7 @@ def ml_upload_resume():
     )
 
     return jsonify({"msg": "ML resume uploaded and linked to jobs", "resume_id": str(resume_id)}), 201
-
+.
 
 @ml_temp_resume_bp.route("/ml/temp_resumes", methods=["GET"])
 @jwt_required()
