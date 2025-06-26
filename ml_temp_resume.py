@@ -84,7 +84,7 @@ def ml_upload_resume():
     )
 
     return jsonify({"msg": "ML resume uploaded and linked to jobs", "resume_id": str(resume_id)}), 201
-.
+
 
 @ml_temp_resume_bp.route("/ml/temp_resumes", methods=["GET"])
 @jwt_required()
